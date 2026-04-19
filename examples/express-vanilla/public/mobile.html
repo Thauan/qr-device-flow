@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>QR Device Flow - Authorize</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: #0f1117;
+      color: #e4e4e7;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .card {
+      background: #1a1b23;
+      border: 1px solid #27282f;
+      border-radius: 16px;
+      padding: 36px;
+      max-width: 380px;
+      width: 100%;
+      text-align: center;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+    }
+
+    .icon {
+      width: 56px;
+      height: 56px;
+      background: #1e1b4b;
+      border-radius: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 20px;
+      font-size: 28px;
+    }
+
+    h1 {
+      font-size: 20px;
+      font-weight: 600;
+      margin-bottom: 6px;
+      color: #fff;
+    }
+
+    .subtitle {
+      font-size: 14px;
+      color: #71717a;
+      margin-bottom: 24px;
+    }
+
+    .code-display {
+      background: #27282f;
+      border-radius: 10px;
+      padding: 16px;
+      margin-bottom: 24px;
+    }
+
+    .code-label {
+      font-size: 11px;
+      color: #71717a;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 6px;
+    }
+
+    .code-value {
+      font-family: "SF Mono", "Fira Code", "Fira Mono", Menlo, Consolas, monospace;
+      font-size: 26px;
+      font-weight: 700;
+      letter-spacing: 4px;
+      color: #a78bfa;
+    }
+
+    .user-id-group {
+      margin-bottom: 20px;
+      text-align: left;
+    }
+
+    .user-id-group label {
+      display: block;
+      font-size: 13px;
+      color: #a1a1aa;
+      margin-bottom: 6px;
+    }
+
+    .user-id-group input {
+      width: 100%;
+      background: #27282f;
+      border: 1px solid #3f3f46;
+      border-radius: 8px;
+      padding: 10px 12px;
+      font-size: 14px;
+      color: #e4e4e7;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .user-id-group input:focus {
+      border-color: #a78bfa;
+    }
+
+    .actions {
+      display: flex;
+      gap: 12px;
+    }
+
+    .btn {
+      flex: 1;
+      padding: 12px 16px;
+      border: none;
+      border-radius: 10px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.2s, transform 0.1s;
+    }
+
+    .btn:active {
+      transform: scale(0.97);
+    }
+
+    .btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .btn-approve {
+      background: #4ade80;
+      color: #052e16;
+    }
+
+    .btn-approve:hover:not(:disabled) {
+      background: #22c55e;
+    }
+
+    .btn-deny {
+      background: #3f3f46;
+      color: #f87171;
+    }
+
+    .btn-deny:hover:not(:disabled) {
+      background: #52525b;
+    }
+
+    .feedback {
+      margin-top: 20px;
+      padding: 12px 16px;
+      border-radius: 8px;
+      font-size: 14px;
+    }
+
+    .feedback-success {
+      background: #052e16;
+      border: 1px solid #166534;
+      color: #4ade80;
+    }
+
+    .feedback-error {
+      background: #450a0a;
+      border: 1px solid #991b1b;
+      color: #f87171;
+    }
+
+    .feedback-denied {
+      background: #27272a;
+      border: 1px solid #3f3f46;
+      color: #a1a1aa;
+    }
+
+    .hidden { display: none; }
+
+    .no-code {
+      color: #f87171;
+      font-size: 14px;
+      padding: 20px 0;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="icon">
+      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#a78bfa" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="5" y="2" width="14" height="20" rx="2" ry="2" />
+        <line x1="12" y1="18" x2="12" y2="18.01" />
+      </svg>
+    </div>
+
+    <h1>Login Request</h1>
+    <p class="subtitle">A device is requesting access to your account</p>
+
+    <div id="no-code" class="no-code hidden">
+      No user code found in URL.<br />
+      This page is meant to be opened via QR code scan.
+    </div>
+
+    <div id="flow-content">
+      <div class="code-display">
+        <div class="code-label">Verification Code</div>
+        <div id="code-value" class="code-value"></div>
+      </div>
+
+      <div class="user-id-group">
+        <label for="user-id">Sign in as</label>
+        <input type="text" id="user-id" value="demo-user" placeholder="Enter user ID" />
+      </div>
+
+      <div class="actions">
+        <button class="btn btn-deny" id="deny-btn" onclick="handleDeny()">Deny</button>
+        <button class="btn btn-approve" id="approve-btn" onclick="handleApprove()">Approve</button>
+      </div>
+    </div>
+
+    <div id="feedback" class="feedback hidden"></div>
+  </div>
+
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    const userCode = params.get("user_code");
+
+    if (!userCode) {
+      document.getElementById("no-code").classList.remove("hidden");
+      document.getElementById("flow-content").classList.add("hidden");
+    } else {
+      document.getElementById("code-value").textContent = userCode;
+    }
+
+    function setButtonsDisabled(disabled) {
+      document.getElementById("approve-btn").disabled = disabled;
+      document.getElementById("deny-btn").disabled = disabled;
+    }
+
+    function showFeedback(message, type) {
+      const el = document.getElementById("feedback");
+      el.textContent = message;
+      el.className = `feedback feedback-${type}`;
+      el.classList.remove("hidden");
+    }
+
+    async function handleApprove() {
+      const userId = document.getElementById("user-id").value.trim();
+      if (!userId) {
+        showFeedback("Please enter a user ID.", "error");
+        return;
+      }
+
+      setButtonsDisabled(true);
+
+      try {
+        // Step 1: Mark as scanned
+        let res = await fetch("/device/scan", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ user_code: userCode }),
+        });
+        let data = await res.json();
+
+        if (!res.ok) {
+          showFeedback("Scan failed: " + (data.error || "Unknown error"), "error");
+          setButtonsDisabled(false);
+          return;
+        }
+
+        // Step 2: Approve
+        res = await fetch("/device/approve", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ user_code: userCode, user_id: userId }),
+        });
+        data = await res.json();
+
+        if (!res.ok) {
+          showFeedback("Approval failed: " + (data.error || "Unknown error"), "error");
+          setButtonsDisabled(false);
+          return;
+        }
+
+        document.getElementById("flow-content").classList.add("hidden");
+        showFeedback("Login approved! You can close this tab.", "success");
+      } catch (err) {
+        showFeedback("Network error: " + err.message, "error");
+        setButtonsDisabled(false);
+      }
+    }
+
+    async function handleDeny() {
+      setButtonsDisabled(true);
+
+      try {
+        // Step 1: Mark as scanned
+        let res = await fetch("/device/scan", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ user_code: userCode }),
+        });
+        let data = await res.json();
+
+        if (!res.ok) {
+          showFeedback("Scan failed: " + (data.error || "Unknown error"), "error");
+          setButtonsDisabled(false);
+          return;
+        }
+
+        // Step 2: Deny
+        res = await fetch("/device/deny", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ user_code: userCode }),
+        });
+        data = await res.json();
+
+        if (!res.ok) {
+          showFeedback("Deny failed: " + (data.error || "Unknown error"), "error");
+          setButtonsDisabled(false);
+          return;
+        }
+
+        document.getElementById("flow-content").classList.add("hidden");
+        showFeedback("Login denied. You can close this tab.", "denied");
+      } catch (err) {
+        showFeedback("Network error: " + err.message, "error");
+        setButtonsDisabled(false);
+      }
+    }
+  </script>
+</body>
+</html>

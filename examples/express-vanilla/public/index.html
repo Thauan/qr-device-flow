@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>QR Device Flow - Login</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: #0f1117;
+      color: #e4e4e7;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .card {
+      background: #1a1b23;
+      border: 1px solid #27282f;
+      border-radius: 16px;
+      padding: 40px;
+      max-width: 420px;
+      width: 100%;
+      text-align: center;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+    }
+
+    h1 {
+      font-size: 22px;
+      font-weight: 600;
+      margin-bottom: 8px;
+      color: #fff;
+    }
+
+    .subtitle {
+      font-size: 14px;
+      color: #71717a;
+      margin-bottom: 28px;
+    }
+
+    #qr-container {
+      background: #fff;
+      border-radius: 12px;
+      padding: 16px;
+      display: inline-block;
+      margin-bottom: 20px;
+    }
+
+    #qr-container svg {
+      display: block;
+      width: 220px;
+      height: 220px;
+    }
+
+    .user-code {
+      font-family: "SF Mono", "Fira Code", "Fira Mono", Menlo, Consolas, monospace;
+      font-size: 28px;
+      font-weight: 700;
+      letter-spacing: 4px;
+      color: #a78bfa;
+      margin-bottom: 8px;
+    }
+
+    .user-code-label {
+      font-size: 12px;
+      color: #71717a;
+      margin-bottom: 20px;
+    }
+
+    .countdown {
+      font-size: 13px;
+      color: #71717a;
+      margin-bottom: 4px;
+    }
+
+    .status {
+      font-size: 14px;
+      padding: 10px 16px;
+      border-radius: 8px;
+      margin-top: 16px;
+    }
+
+    .status-pending {
+      background: #1e1b4b;
+      color: #a78bfa;
+    }
+
+    .status-scanned {
+      background: #172554;
+      color: #60a5fa;
+    }
+
+    .status-approved {
+      background: #052e16;
+      color: #4ade80;
+    }
+
+    .status-denied {
+      background: #450a0a;
+      color: #f87171;
+    }
+
+    .status-expired {
+      background: #27272a;
+      color: #a1a1aa;
+    }
+
+    .session-info {
+      margin-top: 20px;
+      background: #052e16;
+      border: 1px solid #166534;
+      border-radius: 8px;
+      padding: 16px;
+      text-align: left;
+    }
+
+    .session-info h3 {
+      font-size: 14px;
+      color: #4ade80;
+      margin-bottom: 10px;
+    }
+
+    .session-info pre {
+      font-size: 12px;
+      color: #bbf7d0;
+      white-space: pre-wrap;
+      word-break: break-all;
+      font-family: "SF Mono", "Fira Code", monospace;
+    }
+
+    .retry-btn {
+      margin-top: 20px;
+      background: #a78bfa;
+      color: #0f1117;
+      border: none;
+      padding: 10px 24px;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .retry-btn:hover {
+      background: #8b5cf6;
+    }
+
+    .hidden { display: none; }
+
+    .spinner {
+      display: inline-block;
+      width: 16px;
+      height: 16px;
+      border: 2px solid rgba(167, 139, 250, 0.3);
+      border-top-color: #a78bfa;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      vertical-align: middle;
+      margin-right: 6px;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Sign in with your phone</h1>
+    <p class="subtitle">Scan the QR code with your mobile device to log in</p>
+
+    <div id="qr-container"></div>
+
+    <div id="user-code-display" class="user-code"></div>
+    <div class="user-code-label">or enter this code manually</div>
+
+    <div id="countdown" class="countdown"></div>
+    <div id="status" class="status status-pending">
+      <span class="spinner"></span> Waiting for scan...
+    </div>
+
+    <div id="session-info" class="session-info hidden">
+      <h3>Session Issued</h3>
+      <pre id="session-data"></pre>
+    </div>
+
+    <button id="retry-btn" class="retry-btn hidden" onclick="startFlow()">Try Again</button>
+  </div>
+
+  <script>
+    let deviceCode = null;
+    let pollTimer = null;
+    let countdownTimer = null;
+    let expiresAt = null;
+
+    async function startFlow() {
+      // Reset UI
+      document.getElementById("status").className = "status status-pending";
+      document.getElementById("status").innerHTML = '<span class="spinner"></span> Waiting for scan...';
+      document.getElementById("session-info").classList.add("hidden");
+      document.getElementById("retry-btn").classList.add("hidden");
+      document.getElementById("qr-container").classList.remove("hidden");
+      document.getElementById("user-code-display").classList.remove("hidden");
+
+      // Clear any existing timers
+      if (pollTimer) clearInterval(pollTimer);
+      if (countdownTimer) clearInterval(countdownTimer);
+
+      try {
+        const res = await fetch("/device/code", { method: "POST" });
+        const data = await res.json();
+
+        if (!res.ok) {
+          showError("Failed to create challenge: " + (data.error || "Unknown error"));
+          return;
+        }
+
+        deviceCode = data.device_code;
+        expiresAt = Date.now() + data.expires_in * 1000;
+
+        // Render QR code (SVG from server)
+        document.getElementById("qr-container").innerHTML = data.qr_svg;
+
+        // Show user code
+        document.getElementById("user-code-display").textContent = data.user_code;
+
+        // Start countdown
+        updateCountdown();
+        countdownTimer = setInterval(updateCountdown, 1000);
+
+        // Start polling
+        pollTimer = setInterval(pollStatus, data.interval * 1000);
+      } catch (err) {
+        showError("Network error: " + err.message);
+      }
+    }
+
+    function updateCountdown() {
+      const remaining = Math.max(0, Math.ceil((expiresAt - Date.now()) / 1000));
+      const mins = Math.floor(remaining / 60);
+      const secs = remaining % 60;
+      document.getElementById("countdown").textContent =
+        `Expires in ${mins}:${secs.toString().padStart(2, "0")}`;
+
+      if (remaining <= 0) {
+        clearInterval(countdownTimer);
+        clearInterval(pollTimer);
+        showExpired();
+      }
+    }
+
+    async function pollStatus() {
+      if (!deviceCode) return;
+
+      try {
+        const res = await fetch(`/device/status?device_code=${encodeURIComponent(deviceCode)}`);
+        const data = await res.json();
+
+        if (!res.ok) {
+          if (data.code === "expired_token") {
+            showExpired();
+          }
+          return;
+        }
+
+        switch (data.status) {
+          case "pending":
+            // No change
+            break;
+
+          case "scanned":
+            document.getElementById("status").className = "status status-scanned";
+            document.getElementById("status").innerHTML =
+              '<span class="spinner"></span> Phone detected! Confirm on your device...';
+            break;
+
+          case "approved":
+            clearInterval(pollTimer);
+            clearInterval(countdownTimer);
+            await consumeSession();
+            break;
+
+          case "denied":
+            clearInterval(pollTimer);
+            clearInterval(countdownTimer);
+            showDenied();
+            break;
+
+          case "expired":
+            clearInterval(pollTimer);
+            clearInterval(countdownTimer);
+            showExpired();
+            break;
+
+          case "approved-consumed":
+            // Already consumed by someone else
+            clearInterval(pollTimer);
+            clearInterval(countdownTimer);
+            showError("Session was already consumed.");
+            break;
+        }
+      } catch (err) {
+        // Network hiccup, will retry on next poll
+      }
+    }
+
+    async function consumeSession() {
+      try {
+        const res = await fetch("/device/consume", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ device_code: deviceCode }),
+        });
+        const data = await res.json();
+
+        if (!res.ok) {
+          showError("Failed to consume session: " + (data.error || "Unknown error"));
+          return;
+        }
+
+        // Success
+        document.getElementById("qr-container").classList.add("hidden");
+        document.getElementById("user-code-display").classList.add("hidden");
+        document.getElementById("countdown").textContent = "";
+        document.getElementById("status").className = "status status-approved";
+        document.getElementById("status").textContent = "Logged in successfully!";
+
+        document.getElementById("session-data").textContent = JSON.stringify(data, null, 2);
+        document.getElementById("session-info").classList.remove("hidden");
+      } catch (err) {
+        showError("Network error: " + err.message);
+      }
+    }
+
+    function showExpired() {
+      document.getElementById("status").className = "status status-expired";
+      document.getElementById("status").textContent = "Session expired. Please try again.";
+      document.getElementById("countdown").textContent = "";
+      document.getElementById("retry-btn").classList.remove("hidden");
+    }
+
+    function showDenied() {
+      document.getElementById("status").className = "status status-denied";
+      document.getElementById("status").textContent = "Login was denied on the mobile device.";
+      document.getElementById("countdown").textContent = "";
+      document.getElementById("retry-btn").classList.remove("hidden");
+    }
+
+    function showError(msg) {
+      document.getElementById("status").className = "status status-denied";
+      document.getElementById("status").textContent = msg;
+      document.getElementById("retry-btn").classList.remove("hidden");
+    }
+
+    // Start on page load
+    startFlow();
+  </script>
+</body>
+</html>

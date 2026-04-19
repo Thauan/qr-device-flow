@@ -1,0 +1,43 @@
+{
+  "name": "@qr-device-flow/react-native",
+  "version": "0.1.0",
+  "description": "React Native client for QR device flow authentication",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": ["dist", "README.md"],
+  "scripts": {
+    "build": "tsdown && tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@qr-device-flow/core": "workspace:*"
+  },
+  "peerDependencies": {
+    "expo-camera": ">=15.0.0",
+    "react": ">=18.0.0",
+    "react-native": ">=0.72.0"
+  },
+  "peerDependenciesMeta": {
+    "expo-camera": { "optional": true }
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.0",
+    "react": "^19.0.0",
+    "tsdown": "^0.12.0",
+    "typescript": "^5.4.0",
+    "vitest": "^3.2.0",
+    "@types/node": "^20.0.0"
+  },
+  "keywords": ["qr", "auth", "rfc8628", "device-flow", "react-native", "mobile"],
+  "license": "MIT"
+}

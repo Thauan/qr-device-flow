@@ -1,0 +1,20 @@
+{
+  "name": "qr-device-flow",
+  "version": "0.0.0",
+  "private": true,
+  "description": "QR-based cross-device authentication following RFC 8628",
+  "scripts": {
+    "build": "turbo run build",
+    "test": "turbo run test",
+    "typecheck": "turbo run typecheck",
+    "clean": "turbo run clean",
+    "dev": "turbo run dev"
+  },
+  "devDependencies": {
+    "turbo": "^2.5.0"
+  },
+  "packageManager": "pnpm@10.12.1",
+  "pnpm": {
+    "onlyBuiltDependencies": ["esbuild"]
+  }
+}
