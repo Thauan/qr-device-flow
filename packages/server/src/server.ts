@@ -203,7 +203,7 @@ export class DeviceFlowServer {
         current,
         next,
       );
-      if (swap.ok) return;
+      if (swap.ok) return next;
       // else: lost the race, re-read and retry
     }
     throw new ProtocolError("invalid_transition", "too many concurrent updates");

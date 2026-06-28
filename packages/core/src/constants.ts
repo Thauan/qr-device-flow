@@ -5,6 +5,8 @@
  * All durations are in seconds unless noted otherwise.
  */
 
+import type { ChallengeStatus } from "./types";
+
 /**
  * Default challenge lifetime. RFC 8628 says "short-lived"; we pick 120s
  * as a balance between UX (user has time to pick up their phone) and
@@ -59,7 +61,7 @@ export const DEVICE_CODE_PATTERN = /^[A-Za-z0-9_-]{43}$/;
 /**
  * Challenge states that represent the end of a flow (no further transitions allowed).
  */
-export const TERMINAL_STATES: ReadonlySet<"denied" | "expired" | "approved-consumed" | "approved"> = new Set([
+export const TERMINAL_STATES: ReadonlySet<ChallengeStatus> = new Set([
   "approved",
   "approved-consumed",
   "denied",
