@@ -23,7 +23,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@qr-device-flow/core": "workspace:*"
+    "@qr-device-flow/core": "*"
   },
   "devDependencies": {
     "tsdown": "^0.12.0",

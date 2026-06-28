@@ -8,8 +8,8 @@
     "start": "tsx server.ts"
   },
   "dependencies": {
-    "@qr-device-flow/core": "workspace:*",
-    "@qr-device-flow/server": "workspace:*",
+    "@qr-device-flow/core": "*",
+    "@qr-device-flow/server": "*",
     "express": "^4.21.0",
     "qrcode": "^1.5.3"
   },

@@ -20,7 +20,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@qr-device-flow/core": "workspace:*"
+    "@qr-device-flow/core": "*"
   },
   "peerDependencies": {
     "ioredis": ">=5.0.0"
