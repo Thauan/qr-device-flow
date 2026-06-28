@@ -84,7 +84,7 @@ describe("DeviceFlowMobileClient", () => {
 
     it("sends Authorization Bearer header", async () => {
       vi.mocked(globalThis.fetch).mockResolvedValueOnce(
-        jsonResponse({ requester_info: {}, expires_at: 0 }),
+        jsonResponse({ requester_info: {}, expires_at: 1700000000000 }),
       );
 
       const client = new DeviceFlowMobileClient(makeConfig());
@@ -99,7 +99,7 @@ describe("DeviceFlowMobileClient", () => {
     it("supports async getAuthToken", async () => {
       const asyncToken = "async-token-xyz";
       vi.mocked(globalThis.fetch).mockResolvedValueOnce(
-        jsonResponse({ requester_info: {}, expires_at: 0 }),
+        jsonResponse({ requester_info: {}, expires_at: 1700000000000 }),
       );
 
       const client = new DeviceFlowMobileClient(
