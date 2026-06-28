@@ -107,7 +107,7 @@ app.get('/device/status', async (req, res) => {
 
 /**
  * POST /device/scan
- * Mark a challenge as scanned (optional UX step)
+ * Mark a challenge as scanned and return challenge details for mobile consent screen
  */
 app.post('/device/scan', async (req, res) => {
   try {
@@ -121,8 +121,12 @@ app.post('/device/scan', async (req, res) => {
     }
 
     await server.markScanned(userCode);
+    const challenge = await server.getStatus(userCode);
 
-    res.json({ ok: true });
+    res.json({
+      requester_info: challenge.requesterInfo,
+      expires_at: challenge.expiresAt,
+    });
   } catch (error) {
     handleError(res, error);
   }
