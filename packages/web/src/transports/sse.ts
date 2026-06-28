@@ -1,12 +1,8 @@
 import type { ChallengeStatus } from "@qr-device-flow/core";
+import { TERMINAL_STATES } from "@qr-device-flow/core";
+import type { StatusMessage } from "../types/messages.js";
+import { isStatusMessage } from "../types/validators.js";
 import type { Transport } from "./types.js";
-
-const TERMINAL_STATES: ReadonlySet<ChallengeStatus> = new Set([
-  "approved",
-  "approved-consumed",
-  "denied",
-  "expired",
-]);
 
 /**
  * Uses `EventSource` (Server-Sent Events) to subscribe to
@@ -39,7 +35,10 @@ export class SSETransport implements Transport {
 
     this.eventSource.addEventListener("status", (event: MessageEvent) => {
       try {
-        const data = JSON.parse(event.data as string) as { status: ChallengeStatus };
+        const data = JSON.parse(event.data as string);
+        if (!isStatusMessage(data)) {
+          throw new Error("Invalid status message: missing or invalid status field");
+        }
         this.statusCallback?.(data.status);
 
         if (TERMINAL_STATES.has(data.status)) {

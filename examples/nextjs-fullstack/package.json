@@ -1,0 +1,21 @@
+{
+  "name": "@qr-device-flow/fullstack-demo",
+  "version": "1.0.0",
+  "description": "Production-ready QR Device Flow demo with Next.js + Express + Redis",
+  "private": true,
+  "workspaces": ["apps/*"],
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "docker:up": "docker-compose up -d",
+    "docker:down": "docker-compose down",
+    "docker:logs": "docker-compose logs -f"
+  },
+  "devDependencies": {
+    "turbo": "^1.13.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

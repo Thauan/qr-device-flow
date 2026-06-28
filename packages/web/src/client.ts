@@ -1,4 +1,10 @@
 import type { ChallengeStatus, DeviceCodeResponse } from "@qr-device-flow/core";
+import { TERMINAL_STATES } from "@qr-device-flow/core";
+import type { SessionResponsePayload } from "./types/messages.js";
+import {
+  isDeviceCodeResponse,
+  isSessionResponsePayload,
+} from "./types/validators.js";
 import { generateQRDataUrl, generateQRSvg } from "./qr.js";
 import { PollingTransport } from "./transports/polling.js";
 import { SSETransport } from "./transports/sse.js";
@@ -9,13 +15,6 @@ import type {
   HeadlessResult,
   QRDeviceFlowOptions,
 } from "./types.js";
-
-const TERMINAL_STATES: ReadonlySet<ChallengeStatus> = new Set([
-  "approved",
-  "approved-consumed",
-  "denied",
-  "expired",
-]);
 
 /**
  * Browser client for QR-based device authentication (RFC 8628).
@@ -136,7 +135,14 @@ export class QRDeviceFlow {
       throw new Error(`Failed to create challenge: HTTP ${res.status}`);
     }
 
-    return (await res.json()) as DeviceCodeResponse;
+    const body = await res.json();
+    if (!isDeviceCodeResponse(body)) {
+      throw new Error(
+        "Invalid device code response: missing or invalid required fields",
+      );
+    }
+
+    return body;
   }
 
   private startMonitoring(challenge: DeviceCodeResponse): void {
@@ -196,11 +202,12 @@ export class QRDeviceFlow {
         throw new Error(`Failed to consume challenge: HTTP ${res.status}`);
       }
 
-      const body = (await res.json()) as {
-        access_token: string;
-        refresh_token?: string;
-        expires_in?: number;
-      };
+      const body = await res.json();
+      if (!isSessionResponsePayload(body)) {
+        throw new Error(
+          "Invalid session response: missing or invalid access_token",
+        );
+      }
 
       this.options.onApproved?.({
         accessToken: body.access_token,

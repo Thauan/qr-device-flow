@@ -1,13 +1,8 @@
 import type { ChallengeStatus } from "@qr-device-flow/core";
-import { MIN_POLL_INTERVAL_SECONDS } from "@qr-device-flow/core";
+import { MIN_POLL_INTERVAL_SECONDS, TERMINAL_STATES } from "@qr-device-flow/core";
+import type { StatusMessage } from "../types/messages.js";
+import { isStatusMessage } from "../types/validators.js";
 import type { Transport } from "./types.js";
-
-const TERMINAL_STATES: ReadonlySet<ChallengeStatus> = new Set([
-  "approved",
-  "approved-consumed",
-  "denied",
-  "expired",
-]);
 
 /**
  * Polls `GET {endpoint}/status?device_code=XXX` at the server-specified
@@ -45,7 +40,10 @@ export class PollingTransport implements Transport {
         if (!res.ok) {
           throw new Error(`Poll failed with HTTP ${res.status}`);
         }
-        const body = (await res.json()) as { status: ChallengeStatus };
+        const body = await res.json();
+        if (!isStatusMessage(body)) {
+          throw new Error("Invalid status message: missing or invalid status field");
+        }
         this.statusCallback?.(body.status);
 
         if (TERMINAL_STATES.has(body.status)) {

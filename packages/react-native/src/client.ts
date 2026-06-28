@@ -1,5 +1,6 @@
 import type { RequesterInfo } from "@qr-device-flow/core";
 import type { ChallengeDetails, DeviceFlowMobileConfig } from "./types.js";
+import { isChallengeDetailsResponse } from "./validators.js";
 
 /**
  * Error thrown when the device flow server returns a non-OK response.
@@ -44,10 +45,13 @@ export class DeviceFlowMobileClient {
   async fetchChallengeDetails(userCode: string): Promise<ChallengeDetails> {
     const response = await this.#post("/scan", { user_code: userCode });
 
-    const body = (await response.json()) as {
-      requester_info: RequesterInfo;
-      expires_at: number;
-    };
+    const body = await (response as Response).json();
+    if (!isChallengeDetailsResponse(body)) {
+      throw new DeviceFlowClientError(
+        0,
+        "Invalid challenge details response: missing or invalid requester_info or expires_at",
+      );
+    }
 
     return {
       userCode,
@@ -98,8 +102,10 @@ export class DeviceFlowMobileClient {
     if (!response.ok) {
       let detail: string;
       try {
-        const errorBody = (await response.json()) as { error?: string };
-        detail = errorBody.error ?? response.statusText;
+        const errorBody = await response.json();
+        detail = (typeof errorBody === "object" && errorBody !== null && "error" in errorBody && typeof (errorBody as any).error === "string")
+          ? (errorBody as any).error
+          : response.statusText;
       } catch {
         detail = response.statusText;
       }

@@ -13,6 +13,7 @@
 export { DeviceFlowMobileClient, DeviceFlowClientError } from "./client.js";
 export { useDeviceFlowClient } from "./use-device-flow.js";
 export { QRScanner } from "./QRScanner.js";
+export { isRequesterInfo, isChallengeDetailsResponse } from "./validators.js";
 export type {
   DeviceFlowMobileConfig,
   ChallengeDetails,

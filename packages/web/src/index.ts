@@ -24,6 +24,14 @@
 
 export { QRDeviceFlow } from "./client.js";
 export { generateQRSvg, generateQRDataUrl } from "./qr.js";
+export {
+  isStatusMessage,
+  isDeviceCodeResponse,
+  isSessionResponsePayload,
+  isRequesterInfo,
+  isChallengeDetailsResponse,
+  isChallenge,
+} from "./types/validators.js";
 
 export type {
   QRDeviceFlowOptions,
@@ -33,3 +41,4 @@ export type {
 } from "./types.js";
 
 export type { Transport } from "./transports/types.js";
+export type { StatusMessage, SessionResponsePayload } from "./types/messages.js";

@@ -14,6 +14,7 @@
 
 import type { Redis } from "ioredis";
 import type { Challenge } from "@qr-device-flow/core";
+import { isChallenge } from "./validators.js";
 
 // ---------------------------------------------------------------------------
 // Lua script inlined as a constant (no filesystem reads at runtime)
@@ -134,7 +135,13 @@ export class RedisStorage implements ChallengeStorage {
   async getByDeviceCode(deviceCode: string): Promise<Challenge | null> {
     const raw = await this.redis.get(this.dcKey(deviceCode));
     if (raw === null) return null;
-    return JSON.parse(raw) as Challenge;
+    const parsed = JSON.parse(raw);
+    if (!isChallenge(parsed)) {
+      throw new Error(
+        `Corrupted Challenge data for deviceCode "${deviceCode}": invalid structure`,
+      );
+    }
+    return parsed;
   }
 
   async getByUserCode(userCode: string): Promise<Challenge | null> {
@@ -166,7 +173,13 @@ export class RedisStorage implements ChallengeStorage {
     }
 
     // Mismatch — result contains the current JSON
-    return { ok: false, current: JSON.parse(result) as Challenge };
+    const parsed = JSON.parse(result);
+    if (!isChallenge(parsed)) {
+      throw new Error(
+        `Corrupted Challenge data from compareAndSwap: invalid structure`,
+      );
+    }
+    return { ok: false, current: parsed };
   }
 
   /**

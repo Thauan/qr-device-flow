@@ -55,3 +55,13 @@ export const USER_CODE_PATTERN = /^[ABCDEFGHJKMNPQRSTUVWXYZ23456789]{4}-?[ABCDEF
  * Regex matching a well-formed device_code — 43 chars of base64url (from 32 bytes).
  */
 export const DEVICE_CODE_PATTERN = /^[A-Za-z0-9_-]{43}$/;
+
+/**
+ * Challenge states that represent the end of a flow (no further transitions allowed).
+ */
+export const TERMINAL_STATES: ReadonlySet<"denied" | "expired" | "approved-consumed" | "approved"> = new Set([
+  "approved",
+  "approved-consumed",
+  "denied",
+  "expired",
+]);

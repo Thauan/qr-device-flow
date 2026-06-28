@@ -20,6 +20,7 @@ import {
   MIN_POLL_INTERVAL_SECONDS,
   ProtocolError,
   type Challenge,
+  type ChallengeEvent,
   type DeviceCodeResponse,
   type RequesterInfo,
 } from "@qr-device-flow/core";
@@ -188,8 +189,8 @@ export class DeviceFlowServer {
 
   private async applyEventByUserCode(
     rawUserCode: string,
-    event: Parameters<typeof transition>[1],
-  ): Promise<void> {
+    event: ChallengeEvent,
+  ): Promise<Challenge | null> {
     const normalized = normalizeUserCode(rawUserCode);
     const display = normalized.slice(0, 4) + "-" + normalized.slice(4);
 
