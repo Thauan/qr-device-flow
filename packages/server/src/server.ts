@@ -124,8 +124,8 @@ export class DeviceFlowServer {
    * Marks a challenge as scanned (mobile app read the QR, awaiting user
    * confirmation). Optional UX step — safe to skip.
    */
-  async markScanned(userCode: string): Promise<void> {
-    await this.applyEventByUserCode(userCode, { type: "SCAN" });
+  async markScanned(userCode: string): Promise<Challenge> {
+    return await this.applyEventByUserCode(userCode, { type: "SCAN" });
   }
 
   /**
@@ -190,7 +190,7 @@ export class DeviceFlowServer {
   private async applyEventByUserCode(
     rawUserCode: string,
     event: ChallengeEvent,
-  ): Promise<Challenge | null> {
+  ): Promise<Challenge> {
     const normalized = normalizeUserCode(rawUserCode);
     const display = normalized.slice(0, 4) + "-" + normalized.slice(4);
 
