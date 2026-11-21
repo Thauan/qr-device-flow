@@ -2,16 +2,40 @@ import { fileURLToPath } from "node:url";
 import path from "node:path";
 import express from "express";
 import QRCode from "qrcode";
-import { DeviceFlowServer } from "@qr-device-flow/server";
+import Redis from "ioredis";
+import { DeviceFlowServer, type ChallengeStorage } from "@qr-device-flow/server";
+import { mountDeviceFlowRoutes } from "@qr-device-flow/server/express";
 import { MemoryStorage } from "@qr-device-flow/server/storage/memory";
-import { ProtocolError } from "@qr-device-flow/core";
+import { RedisStorage } from "@qr-device-flow/storage-redis";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-const storage = new MemoryStorage();
+// ── Configuration (all optional) ───────────────────────────────────
+//
+// PORT          HTTP port. Default 3000.
+// PUBLIC_URL    Base URL encoded in the QR code. Default http://localhost:$PORT.
+// REDIS_URL     Use Redis for challenges. Default: in-memory (single process only).
+// TTL_SECONDS   Challenge lifetime. Default 120 (capped at 600 by the library).
+
+const PORT = Number(process.env.PORT ?? 3000);
+const PUBLIC_URL = (process.env.PUBLIC_URL ?? `http://localhost:${PORT}`).replace(/\/+$/, "");
+const TTL_SECONDS = process.env.TTL_SECONDS ? Number(process.env.TTL_SECONDS) : undefined;
+
+let storage: ChallengeStorage;
+let redis: Redis | undefined;
+if (process.env.REDIS_URL) {
+  redis = new Redis(process.env.REDIS_URL, { maxRetriesPerRequest: 3 });
+  storage = new RedisStorage({ redis });
+  console.log(`storage: redis (${process.env.REDIS_URL.replace(/\/\/.*@/, "//***@")})`);
+} else {
+  storage = new MemoryStorage();
+  console.log("storage: memory");
+}
+
 const server = new DeviceFlowServer({
   storage,
-  verificationUri: "http://localhost:3000/mobile.html",
+  verificationUri: `${PUBLIC_URL}/mobile.html`,
+  ttlSeconds: TTL_SECONDS,
   issueSession: async ({ userId }) => ({
     accessToken: `demo-token-${userId}-${Date.now()}`,
     refreshToken: `demo-refresh-${userId}`,
@@ -20,94 +44,51 @@ const server = new DeviceFlowServer({
 });
 
 const app = express();
+// TRUST_PROXY=1 when exactly one proxy you control sits in front of this server
+// (e.g. the Next.js app). Then the requester IP comes from X-Forwarded-For.
+// Leave it unset otherwise: with no trusted proxy, the header can be forged.
+if (process.env.TRUST_PROXY) {
+  const value = process.env.TRUST_PROXY;
+  app.set("trust proxy", /^\d+$/.test(value) ? Number(value) : value);
+}
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
 
+app.get("/healthz", (_req, res) => {
+  res.json({ ok: true });
+});
 
-// Device code creation
-app.post("/device/code", async (req, res) => {
-  try {
-    const result = await server.createChallenge(req.body?.requester_info ?? {
-      userAgent: req.headers["user-agent"],
-      ip: req.ip,
-    });
-    const qrSvg = await QRCode.toString(result.verification_uri_complete, {
+// All /device/* routes: code, status, events (SSE), consume, scan, approve, deny.
+mountDeviceFlowRoutes(app, {
+  server,
+  // Demo only: the mobile page sends `Authorization: Bearer <userId>`.
+  // A real app verifies its own session token here.
+  authenticate: (req) => {
+    const auth = req.headers.authorization;
+    return typeof auth === "string" && auth.startsWith("Bearer ")
+      ? auth.slice("Bearer ".length).trim() || null
+      : null;
+  },
+  renderQr: (data) =>
+    QRCode.toString(data, {
       type: "svg",
       margin: 0,
       color: { dark: "#1a1b23", light: "#ffffff" },
+    }),
+});
+
+const httpServer = app.listen(PORT, () => {
+  console.log(`QR Device Flow demo running at ${PUBLIC_URL}`);
+  console.log(`  Web login:        ${PUBLIC_URL}/`);
+  console.log(`  Mobile simulator: ${PUBLIC_URL}/mobile.html`);
+});
+
+// Clean shutdown so `docker compose stop` doesn't wait for the timeout.
+for (const signal of ["SIGINT", "SIGTERM"] as const) {
+  process.on(signal, () => {
+    httpServer.close(() => {
+      redis?.disconnect();
+      process.exit(0);
     });
-    res.json({ ...result, qr_svg: qrSvg });
-  } catch (err) {
-    handleError(res, err);
-  }
-});
-
-// Status polling
-app.get("/device/status", async (req, res) => {
-  try {
-    const challenge = await server.getStatus(req.query.device_code as string);
-    res.json({ status: challenge.status });
-  } catch (err) {
-    handleError(res, err);
-  }
-});
-
-// Consume (browser claims session)
-app.post("/device/consume", async (req, res) => {
-  try {
-    const session = await server.consume(req.body.device_code);
-    res.json({
-      access_token: session.accessToken,
-      refresh_token: session.refreshToken,
-      expires_in: session.expiresIn,
-    });
-  } catch (err) {
-    handleError(res, err);
-  }
-});
-
-// Scan (mobile notifies)
-app.post("/device/scan", async (req, res) => {
-  try {
-    await server.markScanned(req.body.user_code);
-    res.json({ ok: true });
-  } catch (err) {
-    handleError(res, err);
-  }
-});
-
-// Approve
-app.post("/device/approve", async (req, res) => {
-  try {
-    await server.approve(req.body.user_code, req.body.user_id);
-    res.json({ ok: true });
-  } catch (err) {
-    handleError(res, err);
-  }
-});
-
-// Deny
-app.post("/device/deny", async (req, res) => {
-  try {
-    await server.deny(req.body.user_code);
-    res.json({ ok: true });
-  } catch (err) {
-    handleError(res, err);
-  }
-});
-
-function handleError(res: express.Response, err: unknown) {
-  if (err instanceof ProtocolError) {
-    res.status(400).json({ error: err.message, code: err.code });
-  } else {
-    console.error(err);
-    res.status(500).json({ error: "Internal server error" });
-  }
+  });
 }
-
-const PORT = process.env.PORT ?? 3000;
-app.listen(PORT, () => {
-  console.log(`QR Device Flow demo running at http://localhost:${PORT}`);
-  console.log(`  Web login:        http://localhost:${PORT}/`);
-  console.log(`  Mobile simulator: http://localhost:${PORT}/mobile.html`);
-});

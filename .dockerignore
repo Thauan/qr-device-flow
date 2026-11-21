@@ -1,0 +1,9 @@
+**/node_modules
+**/dist
+**/.turbo
+**/.git
+.git
+**/playwright-report
+**/test-results
+examples/express-vanilla/public/app.js
+**/.next

@@ -3,331 +3,137 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>QR Device Flow - Authorize</title>
+  <title>QR Device Flow — Mobile app (demo)</title>
   <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
+    :root {
+      --bg: #f5f6fa;
+      --card: #ffffff;
+      --text: #1a1b23;
+      --muted: #5f6370;
+      --accent: #2563eb;
+      --danger: #b91c1c;
+      --ok: #15803d;
+      --border: #d7dae3;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme="light"]) {
+        --bg: #0f1117;
+        --card: #181b24;
+        --text: #e7e9ef;
+        --muted: #9aa0ad;
+        --accent: #60a5fa;
+        --danger: #f87171;
+        --ok: #4ade80;
+        --border: #2d3140;
+      }
+    }
+    :root[data-theme="dark"] {
+      --bg: #0f1117;
+      --card: #181b24;
+      --text: #e7e9ef;
+      --muted: #9aa0ad;
+      --accent: #60a5fa;
+      --danger: #f87171;
+      --ok: #4ade80;
+      --border: #2d3140;
+    }
+    * { box-sizing: border-box; }
     body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-      background: #0f1117;
-      color: #e4e4e7;
+      margin: 0;
       min-height: 100vh;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 20px;
-    }
-
-    .card {
-      background: #1a1b23;
-      border: 1px solid #27282f;
-      border-radius: 16px;
-      padding: 36px;
-      max-width: 380px;
-      width: 100%;
-      text-align: center;
-      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
-    }
-
-    .icon {
-      width: 56px;
-      height: 56px;
-      background: #1e1b4b;
-      border-radius: 14px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      margin: 0 auto 20px;
-      font-size: 28px;
-    }
-
-    h1 {
-      font-size: 20px;
-      font-weight: 600;
-      margin-bottom: 6px;
-      color: #fff;
-    }
-
-    .subtitle {
-      font-size: 14px;
-      color: #71717a;
-      margin-bottom: 24px;
-    }
-
-    .code-display {
-      background: #27282f;
-      border-radius: 10px;
+      display: grid;
+      place-items: center;
       padding: 16px;
-      margin-bottom: 24px;
+      background: var(--bg);
+      color: var(--text);
+      font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
     }
-
-    .code-label {
-      font-size: 11px;
-      color: #71717a;
-      text-transform: uppercase;
-      letter-spacing: 1px;
-      margin-bottom: 6px;
-    }
-
-    .code-value {
-      font-family: "SF Mono", "Fira Code", "Fira Mono", Menlo, Consolas, monospace;
-      font-size: 26px;
-      font-weight: 700;
-      letter-spacing: 4px;
-      color: #a78bfa;
-    }
-
-    .user-id-group {
-      margin-bottom: 20px;
-      text-align: left;
-    }
-
-    .user-id-group label {
-      display: block;
-      font-size: 13px;
-      color: #a1a1aa;
-      margin-bottom: 6px;
-    }
-
-    .user-id-group input {
+    main {
       width: 100%;
-      background: #27282f;
-      border: 1px solid #3f3f46;
-      border-radius: 8px;
+      max-width: 380px;
+      background: var(--card);
+      border-radius: 16px;
+      padding: 24px;
+      box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08);
+    }
+    h1 { font-size: 1.1rem; margin: 0 0 16px; text-align: center; }
+    label { display: block; font-size: 0.8rem; color: var(--muted); margin-bottom: 4px; }
+    input {
+      width: 100%;
+      font: inherit;
       padding: 10px 12px;
-      font-size: 14px;
-      color: #e4e4e7;
-      outline: none;
-      transition: border-color 0.2s;
-    }
-
-    .user-id-group input:focus {
-      border-color: #a78bfa;
-    }
-
-    .actions {
-      display: flex;
-      gap: 12px;
-    }
-
-    .btn {
-      flex: 1;
-      padding: 12px 16px;
-      border: none;
+      border: 1px solid var(--border);
       border-radius: 10px;
-      font-size: 15px;
-      font-weight: 600;
+      background: var(--bg);
+      color: var(--text);
+      margin-bottom: 14px;
+    }
+    .code {
+      font-family: ui-monospace, Menlo, monospace;
+      font-size: 1.2rem;
+      letter-spacing: 0.12em;
+      text-align: center;
+      margin: 4px 0 16px;
+    }
+    .consent dl { margin: 0 0 16px; display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; font-size: 0.85rem; }
+    .consent dt { color: var(--muted); }
+    .consent dd { margin: 0; word-break: break-word; }
+    .warning { font-size: 0.8rem; color: var(--muted); margin-bottom: 14px; }
+    .actions { display: flex; gap: 10px; }
+    button {
+      flex: 1;
+      font: inherit;
+      padding: 12px;
+      border: 0;
+      border-radius: 10px;
+      background: var(--accent);
+      color: #fff;
       cursor: pointer;
-      transition: opacity 0.2s, transform 0.1s;
     }
-
-    .btn:active {
-      transform: scale(0.97);
-    }
-
-    .btn:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
-      transform: none;
-    }
-
-    .btn-approve {
-      background: #4ade80;
-      color: #052e16;
-    }
-
-    .btn-approve:hover:not(:disabled) {
-      background: #22c55e;
-    }
-
-    .btn-deny {
-      background: #3f3f46;
-      color: #f87171;
-    }
-
-    .btn-deny:hover:not(:disabled) {
-      background: #52525b;
-    }
-
-    .feedback {
-      margin-top: 20px;
-      padding: 12px 16px;
-      border-radius: 8px;
-      font-size: 14px;
-    }
-
-    .feedback-success {
-      background: #052e16;
-      border: 1px solid #166534;
-      color: #4ade80;
-    }
-
-    .feedback-error {
-      background: #450a0a;
-      border: 1px solid #991b1b;
-      color: #f87171;
-    }
-
-    .feedback-denied {
-      background: #27272a;
-      border: 1px solid #3f3f46;
-      color: #a1a1aa;
-    }
-
-    .hidden { display: none; }
-
-    .no-code {
-      color: #f87171;
-      font-size: 14px;
-      padding: 20px 0;
-    }
+    button.secondary { background: transparent; color: var(--danger); border: 1px solid var(--border); }
+    button:disabled { opacity: 0.5; cursor: default; }
+    .feedback { margin-top: 16px; padding: 12px; border-radius: 10px; text-align: center; font-size: 0.9rem; }
+    .feedback-success { color: var(--ok); }
+    .feedback-denied { color: var(--muted); }
+    .feedback-error { color: var(--danger); }
+    [hidden] { display: none !important; }
   </style>
 </head>
 <body>
-  <div class="card">
-    <div class="icon">
-      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#a78bfa" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <rect x="5" y="2" width="14" height="20" rx="2" ry="2" />
-        <line x1="12" y1="18" x2="12" y2="18.01" />
-      </svg>
-    </div>
+  <main>
+    <h1>Approve sign-in</h1>
 
-    <h1>Login Request</h1>
-    <p class="subtitle">A device is requesting access to your account</p>
+    <p id="no-code" class="warning" hidden>No login request. Open this page from the QR code on the website.</p>
 
-    <div id="no-code" class="no-code hidden">
-      No user code found in URL.<br />
-      This page is meant to be opened via QR code scan.
-    </div>
+    <label for="user-id">Signed-in user (demo)</label>
+    <input id="user-id" data-testid="user-id" type="text" autocomplete="off" placeholder="e.g. alice" />
 
-    <div id="flow-content">
-      <div class="code-display">
-        <div class="code-label">Verification Code</div>
-        <div id="code-value" class="code-value"></div>
+    <div id="flow">
+      <label>Login code</label>
+      <p id="user-code" data-testid="user-code" class="code">—</p>
+
+      <div id="review">
+        <button id="review-btn" data-testid="review-btn" type="button">Review request</button>
       </div>
 
-      <div class="user-id-group">
-        <label for="user-id">Sign in as</label>
-        <input type="text" id="user-id" value="demo-user" placeholder="Enter user ID" />
-      </div>
-
-      <div class="actions">
-        <button class="btn btn-deny" id="deny-btn" onclick="handleDeny()">Deny</button>
-        <button class="btn btn-approve" id="approve-btn" onclick="handleApprove()">Approve</button>
+      <div id="consent" class="consent" data-testid="consent" hidden>
+        <p class="warning">Only approve if you are signing in to this browser.</p>
+        <dl>
+          <dt>Browser</dt><dd id="requester-agent" data-testid="requester-agent">—</dd>
+          <dt>IP</dt><dd id="requester-ip" data-testid="requester-ip">—</dd>
+          <dt>Location</dt><dd id="requester-location" data-testid="requester-location">—</dd>
+          <dt>Expires in</dt><dd id="expires-in" data-testid="expires-in">—</dd>
+        </dl>
+        <div class="actions">
+          <button id="deny-btn" class="secondary" data-testid="deny-btn" type="button">Deny</button>
+          <button id="approve-btn" data-testid="approve-btn" type="button">Approve</button>
+        </div>
       </div>
     </div>
 
-    <div id="feedback" class="feedback hidden"></div>
-  </div>
+    <p id="feedback" data-testid="feedback" class="feedback" role="status" hidden></p>
+  </main>
 
-  <script>
-    const params = new URLSearchParams(window.location.search);
-    const userCode = params.get("user_code");
-
-    if (!userCode) {
-      document.getElementById("no-code").classList.remove("hidden");
-      document.getElementById("flow-content").classList.add("hidden");
-    } else {
-      document.getElementById("code-value").textContent = userCode;
-    }
-
-    function setButtonsDisabled(disabled) {
-      document.getElementById("approve-btn").disabled = disabled;
-      document.getElementById("deny-btn").disabled = disabled;
-    }
-
-    function showFeedback(message, type) {
-      const el = document.getElementById("feedback");
-      el.textContent = message;
-      el.className = `feedback feedback-${type}`;
-      el.classList.remove("hidden");
-    }
-
-    async function handleApprove() {
-      const userId = document.getElementById("user-id").value.trim();
-      if (!userId) {
-        showFeedback("Please enter a user ID.", "error");
-        return;
-      }
-
-      setButtonsDisabled(true);
-
-      try {
-        // Step 1: Mark as scanned
-        let res = await fetch("/device/scan", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ user_code: userCode }),
-        });
-        let data = await res.json();
-
-        if (!res.ok) {
-          showFeedback("Scan failed: " + (data.error || "Unknown error"), "error");
-          setButtonsDisabled(false);
-          return;
-        }
-
-        // Step 2: Approve
-        res = await fetch("/device/approve", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ user_code: userCode, user_id: userId }),
-        });
-        data = await res.json();
-
-        if (!res.ok) {
-          showFeedback("Approval failed: " + (data.error || "Unknown error"), "error");
-          setButtonsDisabled(false);
-          return;
-        }
-
-        document.getElementById("flow-content").classList.add("hidden");
-        showFeedback("Login approved! You can close this tab.", "success");
-      } catch (err) {
-        showFeedback("Network error: " + err.message, "error");
-        setButtonsDisabled(false);
-      }
-    }
-
-    async function handleDeny() {
-      setButtonsDisabled(true);
-
-      try {
-        // Step 1: Mark as scanned
-        let res = await fetch("/device/scan", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ user_code: userCode }),
-        });
-        let data = await res.json();
-
-        if (!res.ok) {
-          showFeedback("Scan failed: " + (data.error || "Unknown error"), "error");
-          setButtonsDisabled(false);
-          return;
-        }
-
-        // Step 2: Deny
-        res = await fetch("/device/deny", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ user_code: userCode }),
-        });
-        data = await res.json();
-
-        if (!res.ok) {
-          showFeedback("Deny failed: " + (data.error || "Unknown error"), "error");
-          setButtonsDisabled(false);
-          return;
-        }
-
-        document.getElementById("flow-content").classList.add("hidden");
-        showFeedback("Login denied. You can close this tab.", "denied");
-      } catch (err) {
-        showFeedback("Network error: " + err.message, "error");
-        setButtonsDisabled(false);
-      }
-    }
-  </script>
+  <script src="/mobile-app.js"></script>
 </body>
 </html>

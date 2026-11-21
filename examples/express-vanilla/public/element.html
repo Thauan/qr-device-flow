@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>&lt;qr-device-login&gt; — plain HTML</title>
+  <style>
+    body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 16px;
+      background: #f5f6fa; font-family: system-ui, sans-serif; }
+  </style>
+</head>
+<body>
+  <qr-device-login id="login" endpoint="/device" transport="sse"></qr-device-login>
+  <script src="/element-app.js"></script>
+</body>
+</html>
