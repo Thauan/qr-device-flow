@@ -28,7 +28,12 @@ local obj = cjson.decode(current)
 local expectedUserId = ARGV[2]
 if expectedUserId == '' then expectedUserId = nil end
 
-if obj.status ~= ARGV[1] or obj.userId ~= expectedUserId then
+-- cjson decodes JSON null as cjson.null (a sentinel), not nil. Without this
+-- check a challenge with no userId yet could never match, and every swap failed.
+local currentUserId = obj.userId
+if currentUserId == cjson.null then currentUserId = nil end
+
+if obj.status ~= ARGV[1] or currentUserId ~= expectedUserId then
   return current
 end
 
