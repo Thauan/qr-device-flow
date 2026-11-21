@@ -1,0 +1,40 @@
+{
+  "name": "@qr-device-flow/element",
+  "version": "0.1.0",
+  "description": "<qr-device-login> Web Component for QR device flow authentication",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsdown && tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@qr-device-flow/web": "*"
+  },
+  "keywords": [
+    "qr",
+    "auth",
+    "rfc8628",
+    "web-component",
+    "custom-element"
+  ],
+  "license": "MIT",
+  "devDependencies": {
+    "jsdom": "^29.0.2",
+    "vitest": "^3.2.0"
+  }
+}
