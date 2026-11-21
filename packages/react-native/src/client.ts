@@ -2,6 +2,8 @@ import type { RequesterInfo } from "@qr-device-flow/core";
 import type { ChallengeDetails, DeviceFlowMobileConfig } from "./types.js";
 import { isChallengeDetailsResponse } from "./validators.js";
 
+export type { ChallengeDetails, DeviceFlowMobileConfig } from "./types.js";
+
 /**
  * Error thrown when the device flow server returns a non-OK response.
  */

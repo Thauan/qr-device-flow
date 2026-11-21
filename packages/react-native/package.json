@@ -9,9 +9,16 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./client": {
+      "types": "./dist/client.d.ts",
+      "import": "./dist/client.js"
     }
   },
-  "files": ["dist", "README.md"],
+  "files": [
+    "dist",
+    "README.md"
+  ],
   "scripts": {
     "build": "tsdown && tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
@@ -28,7 +35,9 @@
     "react-native": ">=0.72.0"
   },
   "peerDependenciesMeta": {
-    "expo-camera": { "optional": true }
+    "expo-camera": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@types/react": "^19.0.0",
@@ -38,6 +47,13 @@
     "vitest": "^3.2.0",
     "@types/node": "^20.0.0"
   },
-  "keywords": ["qr", "auth", "rfc8628", "device-flow", "react-native", "mobile"],
+  "keywords": [
+    "qr",
+    "auth",
+    "rfc8628",
+    "device-flow",
+    "react-native",
+    "mobile"
+  ],
   "license": "MIT"
 }
