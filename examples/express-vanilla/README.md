@@ -19,8 +19,8 @@ Open http://localhost:3000. The mobile page is http://localhost:3000/mobile.html
 ### Without Docker
 
 ```bash
-npm install --no-package-lock   # from the repository root
-npm run dev -w qr-device-flow-example   # or: cd examples/express-vanilla && npm run dev
+pnpm install                                # from the repository root
+pnpm --filter qr-device-flow-example run dev  # or: cd examples/express-vanilla && pnpm run dev
 ```
 
 Storage is in-memory, which is fine for one process.
@@ -62,7 +62,7 @@ What the browser cannot cover is the camera (`QRScanner`) and the native app. Th
 
 ```bash
 # On the host: Playwright starts the server itself (in-memory storage, TTL 30 s).
-npm run test:e2e
+pnpm run test:e2e
 
 # Against a running server, for example docker compose:
 docker compose --profile e2e run --rm e2e   # starts the stack and runs everything
@@ -74,4 +74,4 @@ The Docker run uses the official Playwright image for Chromium. Its report and t
 
 - Keep the Redis service name (`server` in `docker-compose.yml`) out of the `.app` TLD. Chrome forces `https://` on `.app` hosts (HSTS preload), so `http://app:3000` fails.
 - The demo authenticates the phone with `Authorization: Bearer <userId>`. That is for the demo only. Replace `authenticate` in `server.ts` with your real session check, and `getAuthToken` in `src/mobile.ts` with your app's session token.
-- The Dockerfiles run `npm install --no-package-lock` because the committed `package-lock.json` is not yet in sync with the workspaces. Switch to `npm ci` once the lock is regenerated.
+- The repo uses pnpm (pinned in the root `package.json`). Internal dependencies use `workspace:*`, and `pnpm-lock.yaml` is committed. Dockerfiles and CI install with `--frozen-lockfile`.

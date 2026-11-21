@@ -27,7 +27,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@qr-device-flow/core": "*"
+    "@qr-device-flow/core": "workspace:*"
   },
   "peerDependencies": {
     "expo-camera": ">=15.0.0",

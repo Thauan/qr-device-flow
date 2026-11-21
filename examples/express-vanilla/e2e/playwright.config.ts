@@ -6,10 +6,10 @@ import { defineConfig, devices } from "@playwright/test";
 //   - the Next.js app (client-side widget, proxies /device) → E2E_NEXT_URL, port 3200 on the host
 //
 // 1. Host (no Docker): Playwright starts both servers itself (in-memory storage, TTL 30 s).
-//      npm run test:e2e
+//      pnpm run test:e2e
 //
 // 2. Against running servers (e.g. docker compose): set both URLs.
-//      E2E_BASE_URL=http://localhost:3000 E2E_NEXT_URL=http://localhost:3200 npm run test:e2e
+//      E2E_BASE_URL=http://localhost:3000 E2E_NEXT_URL=http://localhost:3200 pnpm run test:e2e
 
 const externalApi = process.env.E2E_BASE_URL;
 const externalNext = process.env.E2E_NEXT_URL;
@@ -53,7 +53,7 @@ export default defineConfig({
       ? []
       : [
           {
-            command: "npm start",
+            command: "pnpm start",
             cwd: expressDir,
             url: `${apiURL}/healthz`,
             reuseExistingServer: !process.env.CI,
@@ -66,7 +66,7 @@ export default defineConfig({
       ? []
       : [
           {
-            command: "npm run build && npm start",
+            command: "pnpm run build && pnpm start",
             cwd: nextDir,
             url: nextURL,
             reuseExistingServer: !process.env.CI,

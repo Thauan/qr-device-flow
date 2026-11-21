@@ -5,22 +5,22 @@
   "type": "module",
   "scripts": {
     "build:client": "esbuild src/client.ts --bundle --format=iife --target=es2020 --outfile=public/app.js && esbuild src/mobile.ts --bundle --format=iife --target=es2020 --outfile=public/mobile-app.js && esbuild src/element-demo.ts --bundle --format=iife --target=es2020 --outfile=public/element-app.js && esbuild src/react-demo.ts --bundle --format=iife --target=es2020 --outfile=public/react-app.js --define:process.env.NODE_ENV='\"development\"' && esbuild src/vue-demo.ts --bundle --format=iife --target=es2020 --outfile=public/vue-app.js --define:process.env.NODE_ENV='\"development\"'",
-    "dev": "npm run build:client && tsx watch server.ts",
-    "start": "npm run build:client && tsx server.ts",
+    "dev": "pnpm run build:client && tsx watch server.ts",
+    "start": "pnpm run build:client && tsx server.ts",
     "test:e2e": "playwright test -c e2e/playwright.config.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.client.json && tsc --noEmit -p e2e/tsconfig.json",
     "serve": "tsx server.ts"
   },
   "dependencies": {
-    "@qr-device-flow/core": "*",
-    "@qr-device-flow/server": "*",
-    "@qr-device-flow/storage-redis": "*",
-    "@qr-device-flow/web": "*",
+    "@qr-device-flow/core": "workspace:*",
+    "@qr-device-flow/server": "workspace:*",
+    "@qr-device-flow/storage-redis": "workspace:*",
+    "@qr-device-flow/web": "workspace:*",
     "express": "^4.21.0",
     "ioredis": "^5.4.0",
     "qrcode": "^1.5.3",
-    "@qr-device-flow/react-native": "*",
-    "@qr-device-flow/element": "*",
+    "@qr-device-flow/react-native": "workspace:*",
+    "@qr-device-flow/element": "workspace:*",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "vue": "^3.5.0"
@@ -29,10 +29,14 @@
     "@playwright/test": "^1.65.1",
     "@types/express": "^4.17.0",
     "@types/node": "^20.0.0",
+    "@types/pngjs": "^6.0.5",
+    "@types/qrcode": "^1.5.5",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
     "esbuild": "^0.25.0",
-    "tsx": "^4.0.0",
     "jsqr": "^1.4.0",
     "pngjs": "^7.0.0",
-    "@types/pngjs": "^6.0.5"
+    "tsx": "^4.0.0",
+    "typescript": "^5.4.0"
   }
 }

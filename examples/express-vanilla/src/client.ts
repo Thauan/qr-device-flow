@@ -1,4 +1,4 @@
-// Browser entry for the login page. Bundled to public/app.js by `npm run build:client`.
+// Browser entry for the login page. Bundled to public/app.js by `pnpm run build:client`.
 //
 // Uses the real @qr-device-flow/web client, so the demo (and the e2e tests)
 // exercise the published library, not a hand-written copy of it.

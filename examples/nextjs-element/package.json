@@ -9,7 +9,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@qr-device-flow/element": "*",
+    "@qr-device-flow/element": "workspace:*",
     "next": "16.4.6",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"

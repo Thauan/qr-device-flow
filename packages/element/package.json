@@ -23,7 +23,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@qr-device-flow/web": "*"
+    "@qr-device-flow/web": "workspace:*"
   },
   "keywords": [
     "qr",
@@ -34,7 +34,10 @@
   ],
   "license": "MIT",
   "devDependencies": {
+    "@types/node": "^20.0.0",
     "jsdom": "^29.0.2",
+    "tsdown": "^0.12.0",
+    "typescript": "^5.4.0",
     "vitest": "^3.2.0"
   }
 }

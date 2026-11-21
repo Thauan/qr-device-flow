@@ -7,27 +7,129 @@ on:
     branches: [main]
 
 jobs:
+  # Build, typecheck and unit tests for every workspace.
   ci:
     runs-on: ubuntu-latest
+
+    services:
+      # Lets the storage-redis integration tests run against real Redis.
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
+    env:
+      REDIS_URL: redis://localhost:6379
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4 # version comes from "packageManager" in package.json
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
+          cache: pnpm
 
       - name: Install dependencies
-        run: npm install
+        run: pnpm install --frozen-lockfile
 
       - name: Build all packages
-        run: npx turbo run build
+        run: pnpm exec turbo run build
 
       - name: Type check
-        run: npx turbo run typecheck
+        run: pnpm exec turbo run typecheck
 
-      - name: Run tests
-        run: npx turbo run test
+      - name: Run unit tests
+        run: pnpm exec turbo run test
+
+  # End-to-end tests on the host: Playwright starts the Express and Next.js
+  # servers itself (Redis storage, TTL 30 s), and runs Chromium.
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
+    env:
+      REDIS_URL: redis://localhost:6379
+      CI: "1"
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4 # version comes from "packageManager" in package.json
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build packages used by the demos
+        run: >-
+          pnpm exec turbo run build
+          --filter=qr-device-flow-example...
+          --filter=qr-device-flow-next-example...
+
+      - name: Install Chromium
+        working-directory: examples/express-vanilla
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Run e2e tests
+        working-directory: examples/express-vanilla
+        run: pnpm run test:e2e
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            examples/express-vanilla/playwright-report
+            examples/express-vanilla/test-results
+          if-no-files-found: ignore
+          retention-days: 7
+
+  # The same stack as local development: Dockerfiles, Redis, both servers,
+  # and the Playwright container. Slower (image builds), so it runs last.
+  e2e-docker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    needs: [ci]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run e2e in Docker Compose
+        run: >-
+          docker compose -f examples/express-vanilla/docker-compose.yml
+          --profile e2e up --build
+          --abort-on-container-exit --exit-code-from e2e
+
+      - name: Tear down
+        if: always()
+        run: docker compose -f examples/express-vanilla/docker-compose.yml down -v --remove-orphans

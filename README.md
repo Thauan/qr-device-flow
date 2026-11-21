@@ -123,7 +123,7 @@ Or skip the SDK entirely -- the protocol is plain REST. See [PROTOCOL.md](./PROT
 ```bash
 pnpm install        # bootstrap all packages
 pnpm build          # build all packages
-pnpm test           # run 109 tests
+pnpm test           # run all unit tests
 pnpm typecheck      # verify types across the monorepo
 ```
 
@@ -134,7 +134,7 @@ cd examples/express-vanilla
 docker compose up --build    # Redis + server on http://localhost:3000
 ```
 
-Or without Docker (in-memory storage): `npm install --no-package-lock && npm run dev`, from `examples/express-vanilla`. See [examples/express-vanilla/README.md](./examples/express-vanilla/README.md) for configuration and the end-to-end tests.
+Or without Docker (in-memory storage): `pnpm install && pnpm --filter qr-device-flow-example run dev`, from the repository root. See [examples/express-vanilla/README.md](./examples/express-vanilla/README.md) for configuration and the end-to-end tests.
 
 ## Architecture decisions
 

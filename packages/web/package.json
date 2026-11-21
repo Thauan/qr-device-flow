@@ -23,7 +23,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@qr-device-flow/core": "*",
+    "@qr-device-flow/core": "workspace:*",
     "qrcode": "^1.5.4"
   },
   "devDependencies": {

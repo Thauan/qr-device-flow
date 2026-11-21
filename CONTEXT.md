@@ -189,13 +189,13 @@ cd qr-device-flow
 
 # Instalar e testar o core
 cd qr-device-flow-core
-npm install
-npx vitest run   # deve passar 54 testes
+pnpm install
+pnpm exec vitest run   # deve passar 54 testes
 
 # Instalar e testar o server (depende do core)
 cd ../qr-device-flow-server
-npm install
-npx vitest run   # deve passar 20 testes
+pnpm install
+pnpm exec vitest run   # deve passar 20 testes
 ```
 
 Ambos usam TypeScript strict, ES2022, module ESNext, moduleResolution bundler. Node 20+ necessário por causa de `globalThis.crypto.getRandomValues` nativo.
@@ -215,7 +215,7 @@ Se o objetivo for formalizar endpoints HTTP do server:
 
 Se o objetivo for POC end-to-end:
 - [ ] Criar `/examples/express-vanilla/` com servidor + página + simulador
-- [ ] Adicionar script `npm run demo` no root
+- [ ] Adicionar script `pnpm run demo` no root
 
 ## 10. Onde cada coisa mora
 
