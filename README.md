@@ -41,11 +41,11 @@ Terminal states: `approved-consumed`, `denied`, `expired`. The `scanned` state i
 ```ts
 import express from "express";
 import { DeviceFlowServer } from "@qr-device-flow/server";
+import { mountDeviceFlowRoutes } from "@qr-device-flow/server/express";
 import { MemoryStorage } from "@qr-device-flow/server/storage/memory";
 
-const storage = new MemoryStorage();
 const server = new DeviceFlowServer({
-  storage,
+  storage: new MemoryStorage(), // use @qr-device-flow/storage-redis in production
   verificationUri: "https://app.example.com/connect",
   issueSession: async ({ userId }) => ({
     accessToken: `token-for-${userId}`,
@@ -57,33 +57,16 @@ const server = new DeviceFlowServer({
 const app = express();
 app.use(express.json());
 
-app.post("/device/code", async (req, res) => {
-  const result = await server.createChallenge({
-    userAgent: req.headers["user-agent"],
-    ip: req.ip,
-  });
-  res.json(result);
-});
-
-app.get("/device/status", async (req, res) => {
-  const challenge = await server.getStatus(req.query.device_code as string);
-  res.json({ status: challenge.status });
-});
-
-app.post("/device/consume", async (req, res) => {
-  const session = await server.consume(req.body.device_code);
-  res.json(session);
-});
-
-app.post("/device/approve", async (req, res) => {
-  // userId MUST come from the authenticated session, never from the body
-  const userId = req.headers.authorization; // your auth logic here
-  await server.approve(req.body.user_code, userId);
-  res.json({ ok: true });
+mountDeviceFlowRoutes(app, {
+  server,
+  // Return the logged-in mobile user's ID, or null. Your auth logic goes here.
+  authenticate: (req) => verifyBearerToken(req.headers.authorization) ?? null,
 });
 
 app.listen(3000);
 ```
+
+`mountDeviceFlowRoutes` registers every endpoint in [PROTOCOL.md](./PROTOCOL.md) under `/device`, including `GET /device/events` (Server-Sent Events). The browser client uses that stream by default when you pick `transport: "sse"`, and it stops polling on its own. Pass `basePath` to change the prefix, and `renderQr` to also return a `qr_svg` from `/device/code`.
 
 ### 2. Browser (`@qr-device-flow/web`)
 
@@ -148,11 +131,10 @@ pnpm typecheck      # verify types across the monorepo
 
 ```bash
 cd examples/express-vanilla
-pnpm install
-pnpm dev
+docker compose up --build    # Redis + server on http://localhost:3000
 ```
 
-Opens a web page with a QR code and a mobile simulator side-by-side on `localhost:3000`.
+Or without Docker (in-memory storage): `npm install --no-package-lock && npm run dev`, from `examples/express-vanilla`. See [examples/express-vanilla/README.md](./examples/express-vanilla/README.md) for configuration and the end-to-end tests.
 
 ## Architecture decisions
 

@@ -111,6 +111,37 @@ GET /device/status?device_code=a1b2c3...43chars
 
 ---
 
+### `GET /device/events`
+
+Server-Sent Events alternative to polling `/device/status`. Called by the **browser** with `EventSource`. The server pushes a `status` event whenever the challenge changes and closes the stream on a terminal state (`approved`, `denied`, `expired`, `approved-consumed`).
+
+**Request:**
+```http
+GET /device/events?device_code=a1b2c3...43chars
+Accept: text/event-stream
+```
+
+**Response — `200 OK`, `Content-Type: text/event-stream`:**
+```
+event: status
+data: {"status":"pending"}
+
+event: status
+data: {"status":"scanned"}
+
+event: status
+data: {"status":"approved"}
+
+```
+
+- Each `status` event carries the same `status` values as `/device/status`.
+- `: ping` comment lines are sent about every 15 s to keep proxies from closing idle connections.
+- An unknown or expired `device_code` produces a single `expired` event, not an HTTP error.
+- A malformed `device_code` returns `400 invalid_device_code` before the stream opens.
+- The `EventSource` reconnects on its own. The stream does not need `Last-Event-ID`: a reconnect receives the current status first.
+
+---
+
 ### `POST /device/consume`
 
 Claims the session after approval. Called by the **browser** exactly once. Atomic — only the first caller succeeds.
@@ -172,7 +203,7 @@ The `user_code` accepts any format: with/without dash, lowercase, surrounding sp
 }
 ```
 
-Integrators may extend this response to include `requester_info` for the consent screen:
+The reference server (`mountDeviceFlowRoutes`) returns `requester_info` and `expires_at` for the consent screen:
 ```json
 {
   "ok": true,
