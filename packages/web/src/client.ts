@@ -1,6 +1,5 @@
 import type { ChallengeStatus, DeviceCodeResponse } from "@qr-device-flow/core";
 import { TERMINAL_STATES } from "@qr-device-flow/core";
-import type { SessionResponsePayload } from "./types/messages.js";
 import {
   isDeviceCodeResponse,
   isSessionResponsePayload,
@@ -35,6 +34,7 @@ import type {
 export class QRDeviceFlow {
   private readonly options: QRDeviceFlowOptions;
   private transport: Transport | null = null;
+  private expiryTimer: ReturnType<typeof setTimeout> | null = null;
   private currentDeviceCode: string | null = null;
   private destroyed = false;
   private containerEl: HTMLElement | null = null;
@@ -114,8 +114,7 @@ export class QRDeviceFlow {
    */
   destroy(): void {
     this.destroyed = true;
-    this.transport?.disconnect();
-    this.transport = null;
+    this.stopMonitoring();
     this.currentDeviceCode = null;
     if (this.containerEl) {
       this.containerEl.innerHTML = "";
@@ -146,33 +145,80 @@ export class QRDeviceFlow {
   }
 
   private startMonitoring(challenge: DeviceCodeResponse): void {
+    this.stopMonitoring();
+
+    const transport = this.createTransport();
+    this.transport = transport;
     this.currentDeviceCode = challenge.device_code;
 
-    // Disconnect any existing transport before creating a new one
-    this.transport?.disconnect();
+    // The client enforces the TTL locally too, so the UI never gets stuck
+    // on "pending" when the server stops reporting the challenge.
+    this.expiryTimer = setTimeout(() => {
+      this.handleStatus(transport, "expired");
+    }, challenge.expires_in * 1000);
 
-    this.transport = this.createTransport();
+    transport.onStatus((status: ChallengeStatus) => {
+      this.handleStatus(transport, status);
+    });
 
-    this.transport.onStatus((status: ChallengeStatus) => {
-      if (this.destroyed) return;
-
-      this.options.onStateChange?.(status);
-
-      if (status === "approved") {
-        void this.consumeChallenge();
-      } else if (status === "expired" && this.options.autoRegenerate) {
-        void this.regenerate();
-      } else if (status === "denied") {
-        this.options.onError?.(new Error("Authorization denied by user"));
+    transport.onError?.((error: Error) => {
+      if (this.isCurrent(transport)) {
+        this.options.onError?.(error);
       }
     });
 
-    this.transport.onError?.((error: Error) => {
-      if (this.destroyed) return;
-      this.options.onError?.(error);
-    });
+    transport.connect(challenge.device_code, challenge.interval);
+  }
 
-    this.transport.connect(challenge.device_code, challenge.interval);
+  /**
+   * Stops monitoring the current challenge. Callbacks from the stopped
+   * transport are ignored afterwards, so late responses can't act on a
+   * newer challenge.
+   */
+  private stopMonitoring(): void {
+    if (this.expiryTimer !== null) {
+      clearTimeout(this.expiryTimer);
+      this.expiryTimer = null;
+    }
+    this.transport?.disconnect();
+    this.transport = null;
+  }
+
+  private isCurrent(transport: Transport): boolean {
+    return !this.destroyed && this.transport === transport;
+  }
+
+  private handleStatus(transport: Transport, status: ChallengeStatus): void {
+    if (!this.isCurrent(transport)) return;
+
+    this.options.onStateChange?.(status);
+
+    switch (status) {
+      case "approved": {
+        // Stop monitoring before consuming so a late status update can't
+        // trigger a second consume for the same challenge.
+        const deviceCode = this.currentDeviceCode;
+        this.stopMonitoring();
+        if (deviceCode) {
+          void this.consumeChallenge(deviceCode);
+        }
+        break;
+      }
+      case "expired":
+        this.stopMonitoring();
+        if (this.options.autoRegenerate) {
+          void this.regenerate();
+        }
+        break;
+      case "denied":
+        this.stopMonitoring();
+        this.options.onError?.(new Error("Authorization denied by user"));
+        break;
+      default:
+        if (TERMINAL_STATES.has(status)) {
+          this.stopMonitoring();
+        }
+    }
   }
 
   private createTransport(): Transport {
@@ -188,14 +234,14 @@ export class QRDeviceFlow {
     }
   }
 
-  private async consumeChallenge(): Promise<void> {
-    if (!this.currentDeviceCode || this.destroyed) return;
+  private async consumeChallenge(deviceCode: string): Promise<void> {
+    if (this.destroyed) return;
 
     try {
       const res = await fetch(`${this.options.endpoint}/consume`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ device_code: this.currentDeviceCode }),
+        body: JSON.stringify({ device_code: deviceCode }),
       });
 
       if (!res.ok) {
@@ -209,12 +255,15 @@ export class QRDeviceFlow {
         );
       }
 
+      if (this.destroyed) return;
+
       this.options.onApproved?.({
         accessToken: body.access_token,
         refreshToken: body.refresh_token,
         expiresIn: body.expires_in,
       });
     } catch (err) {
+      if (this.destroyed) return;
       this.options.onError?.(
         err instanceof Error ? err : new Error(String(err)),
       );
@@ -224,8 +273,7 @@ export class QRDeviceFlow {
   private async regenerate(): Promise<void> {
     if (this.destroyed) return;
 
-    this.transport?.disconnect();
-    this.transport = null;
+    this.stopMonitoring();
     this.currentDeviceCode = null;
 
     try {
@@ -233,10 +281,11 @@ export class QRDeviceFlow {
         // Re-render with a new challenge in DOM mode
         await this.start({ container: this.containerEl });
       } else {
-        // In headless mode, just create a new challenge and monitor
-        const challenge = await this.createChallenge();
+        // Headless mode: the caller owns the QR, so hand it the new one.
+        // startHeadless() renders the new QR and starts monitoring it.
+        const result = await this.startHeadless();
         if (!this.destroyed) {
-          this.startMonitoring(challenge);
+          this.options.onRegenerate?.(result);
         }
       }
     } catch (err) {

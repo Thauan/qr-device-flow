@@ -4,6 +4,19 @@ import type { StatusMessage } from "../types/messages.js";
 import { isStatusMessage } from "../types/validators.js";
 import type { Transport } from "./types.js";
 
+async function readErrorCode(res: Response): Promise<string | undefined> {
+  try {
+    const body: unknown = await res.json();
+    if (typeof body === "object" && body !== null && "code" in body) {
+      const code = (body as { code: unknown }).code;
+      return typeof code === "string" ? code : undefined;
+    }
+  } catch {
+    // Non-JSON error body: treat as unknown code.
+  }
+  return undefined;
+}
+
 /**
  * Polls `GET {endpoint}/status?device_code=XXX` at the server-specified
  * interval (clamped to the RFC minimum of 5 seconds).
@@ -38,6 +51,12 @@ export class PollingTransport implements Transport {
         const url = `${this.endpoint}/status?device_code=${encodeURIComponent(deviceCode)}`;
         const res = await fetch(url);
         if (!res.ok) {
+          // The server reports an expired/unknown challenge as 400 expired_token.
+          // That is a status, not a transport failure.
+          if (res.status === 400 && (await readErrorCode(res)) === "expired_token") {
+            this.statusCallback?.("expired");
+            return;
+          }
           throw new Error(`Poll failed with HTTP ${res.status}`);
         }
         const body = await res.json();

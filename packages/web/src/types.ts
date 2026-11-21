@@ -34,6 +34,13 @@ export interface QRDeviceFlowOptions {
    */
   autoRegenerate?: boolean;
 
+  /**
+   * Headless mode only. Called with the new challenge (QR, user code, expiry)
+   * after an automatic regeneration, so the caller can redraw its QR code.
+   * DOM mode redraws the container itself and does not call this.
+   */
+  onRegenerate?: (result: HeadlessResult) => void;
+
   /** QR code size in pixels. Defaults to `256`. */
   qrSize?: number;
 }
