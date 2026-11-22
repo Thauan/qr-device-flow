@@ -23,7 +23,8 @@ for (const transport of TRANSPORTS) {
 
       await reviewOnPhone(phone);
       // The consent screen names the site that asked (the login page's origin).
-      await expect(phone.getByTestId("requester-origin")).toContainText("localhost");
+      // The origin is the page that asked for the login, whatever host the run uses.
+      await expect(phone.getByTestId("requester-origin")).toHaveText(new URL(baseURL!).origin);
       await approveOnPhone(phone, login.verificationNumber);
       await expect(phone.getByTestId("feedback")).toContainText("Login approved");
 
