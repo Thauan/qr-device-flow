@@ -1,8 +1,10 @@
-# Full stack: Redis + the demo server (service "server"), plus an optional Playwright run.
+# Full stack: Redis, the demo API (two instances) and the Next.js app.
 #
-#   docker compose up --build              # API + login pages on http://localhost:3000, Next.js on :3200
-#   docker compose --profile e2e run --rm e2e   # run the e2e suite against it
+#   docker compose up --build --wait       # API on :3000 (verification on), :3001 (off), Next.js on :3200
 #   docker compose down -v
+#
+# CI builds the images with buildx (cached) and starts them with --no-build.
+# The images are named (image:) so that `up --no-build` finds what buildx built.
 
 services:
   redis:
@@ -16,6 +18,7 @@ services:
   # Not named "app": the .app TLD is HSTS-preloaded, so Chrome would turn
   # http://app:3000 into https:// and fail.
   server:
+    image: qrdf-app:ci
     build:
       context: ../..
       dockerfile: examples/express-vanilla/Dockerfile
@@ -45,6 +48,7 @@ services:
 
   # A second API instance with verification off, for the verification-none e2e spec.
   server-none:
+    image: qrdf-app:ci
     build:
       context: ../..
       dockerfile: examples/express-vanilla/Dockerfile
@@ -70,6 +74,7 @@ services:
 
   # The Next.js app. It reaches the API through its own /device proxy.
   web:
+    image: qrdf-next:ci
     build:
       context: ../..
       dockerfile: examples/express-vanilla/Dockerfile
@@ -87,23 +92,3 @@ services:
       interval: 3s
       timeout: 3s
       retries: 30
-
-  e2e:
-    profiles: ["e2e"]
-    build:
-      context: ../..
-      dockerfile: examples/express-vanilla/Dockerfile
-      target: e2e
-    environment:
-      E2E_BASE_URL: "http://server:3000"
-      E2E_NEXT_URL: "http://web:3200"
-      E2E_NONE_URL: "http://server-none:3000"
-      CI: "1"
-    depends_on:
-      server:
-        condition: service_healthy
-      server-none:
-        condition: service_healthy
-      web:
-        condition: service_healthy
-    ipc: host
