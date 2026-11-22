@@ -58,26 +58,13 @@ jobs:
         if: github.event_name == 'pull_request'
         run: pnpm changeset status --since=origin/main
 
-  # End-to-end tests on the host: Playwright starts the Express and Next.js
-  # servers itself (Redis storage, TTL 30 s), and runs Chromium.
+  # End-to-end tests against the Docker Compose stack: Redis, the API (verification on
+  # and off) and the Next.js app. The images are built from the Dockerfile with buildx
+  # and cached in GitHub Actions; Playwright runs on the runner against the published ports.
   e2e:
     runs-on: ubuntu-latest
     timeout-minutes: 30
-
-    services:
-      redis:
-        image: redis:7-alpine
-        ports:
-          - 6379:6379
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 5s
-          --health-timeout 3s
-          --health-retries 10
-
-    env:
-      REDIS_URL: redis://localhost:6379
-      CI: "1"
+    needs: [ci]
 
     steps:
       - name: Checkout code
@@ -92,14 +79,32 @@ jobs:
           node-version: 22
           cache: pnpm
 
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
-      - name: Build packages used by the demos
-        run: >-
-          pnpm exec turbo run build
-          --filter=qr-device-flow-example...
-          --filter=qr-device-flow-next-example...
+      - name: Build images (cached)
+        uses: docker/bake-action@v6
+        with:
+          files: examples/express-vanilla/docker-compose.yml
+          # The build context is the repository root, outside the compose file's folder.
+          allow: fs.read=${{ github.workspace }}
+          load: true
+          set: |
+            *.cache-from=type=gha
+            *.cache-to=type=gha,mode=max
+
+      - name: Start the stack
+        working-directory: examples/express-vanilla
+        run: docker compose -f docker-compose.yml up -d --no-build --wait
+
+      - name: Install test dependencies
+        run: pnpm install --frozen-lockfile --filter qr-device-flow-example
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
 
       - name: Install Chromium
         working-directory: examples/express-vanilla
@@ -107,36 +112,31 @@ jobs:
 
       - name: Run e2e tests
         working-directory: examples/express-vanilla
+        env:
+          E2E_BASE_URL: http://localhost:3000
+          E2E_NEXT_URL: http://localhost:3200
+          E2E_NONE_URL: http://localhost:3001
+          CI: "1"
         run: pnpm run test:e2e
 
-      - name: Upload Playwright report
+      - name: Save service logs
+        if: failure()
+        working-directory: examples/express-vanilla
+        run: docker compose -f docker-compose.yml logs --no-color > compose-logs.txt
+
+      - name: Upload Playwright report and logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-report
+          name: e2e-artifacts
           path: |
             examples/express-vanilla/playwright-report
             examples/express-vanilla/test-results
+            examples/express-vanilla/compose-logs.txt
           if-no-files-found: ignore
           retention-days: 7
 
-  # The same stack as local development: Dockerfiles, Redis, both servers,
-  # and the Playwright container. Slower (image builds), so it runs last.
-  e2e-docker:
-    runs-on: ubuntu-latest
-    timeout-minutes: 45
-    needs: [ci]
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Run e2e in Docker Compose
-        run: >-
-          docker compose -f examples/express-vanilla/docker-compose.yml
-          --profile e2e up --build
-          --abort-on-container-exit --exit-code-from e2e
-
       - name: Tear down
         if: always()
-        run: docker compose -f examples/express-vanilla/docker-compose.yml down -v --remove-orphans
+        working-directory: examples/express-vanilla
+        run: docker compose -f docker-compose.yml down -v --remove-orphans
