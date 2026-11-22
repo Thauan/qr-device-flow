@@ -12,6 +12,7 @@ import type { DeviceFlowMobileConfig } from "../src/types.js";
 const ENDPOINT = "https://auth.example.com/device";
 const AUTH_TOKEN = "test-jwt-token-abc123";
 const USER_CODE = "ABCD-EFGH";
+const VERIFICATION_NUMBER = "42";
 
 function makeConfig(
   overrides?: Partial<DeviceFlowMobileConfig>,
@@ -79,7 +80,17 @@ describe("DeviceFlowMobileClient", () => {
         userCode: USER_CODE,
         requesterInfo: serverPayload.requester_info,
         expiresAt: serverPayload.expires_at,
+        // No "verification" field from the server: the stricter default applies.
+        verification: "number",
       });
+    });
+
+    it("reports verification none when the server says so", async () => {
+      vi.mocked(globalThis.fetch).mockResolvedValueOnce(
+        jsonResponse({ requester_info: {}, expires_at: 1700000000000, verification: "none" }),
+      );
+      const details = await new DeviceFlowMobileClient(makeConfig()).fetchChallengeDetails(USER_CODE);
+      expect(details.verification).toBe("none");
     });
 
     it("sends Authorization Bearer header", async () => {
@@ -116,11 +127,18 @@ describe("DeviceFlowMobileClient", () => {
   // ---- approve --------------------------------------------------------------
 
   describe("approve", () => {
+    it("omits verification_number when the server runs without verification", async () => {
+      vi.mocked(globalThis.fetch).mockResolvedValueOnce(jsonResponse({}));
+      await new DeviceFlowMobileClient(makeConfig()).approve(USER_CODE);
+      const [, init] = vi.mocked(globalThis.fetch).mock.calls[0]!;
+      expect(JSON.parse(init?.body as string)).toEqual({ user_code: USER_CODE });
+    });
+
     it("calls POST /approve with user_code and auth header", async () => {
       vi.mocked(globalThis.fetch).mockResolvedValueOnce(jsonResponse({}));
 
       const client = new DeviceFlowMobileClient(makeConfig());
-      await client.approve(USER_CODE);
+      await client.approve(USER_CODE, VERIFICATION_NUMBER);
 
       expect(globalThis.fetch).toHaveBeenCalledOnce();
       const [url, init] = vi.mocked(globalThis.fetch).mock.calls[0]!;
@@ -128,6 +146,7 @@ describe("DeviceFlowMobileClient", () => {
       expect(init?.method).toBe("POST");
       expect(JSON.parse(init?.body as string)).toEqual({
         user_code: USER_CODE,
+        verification_number: VERIFICATION_NUMBER,
       });
 
       const headers = init?.headers as Record<string, string>;
@@ -138,7 +157,7 @@ describe("DeviceFlowMobileClient", () => {
       vi.mocked(globalThis.fetch).mockResolvedValueOnce(jsonResponse({}));
 
       const client = new DeviceFlowMobileClient(makeConfig());
-      const result = await client.approve(USER_CODE);
+      const result = await client.approve(USER_CODE, VERIFICATION_NUMBER);
       expect(result).toBeUndefined();
     });
   });
@@ -203,7 +222,7 @@ describe("DeviceFlowMobileClient", () => {
 
       const client = new DeviceFlowMobileClient(makeConfig());
 
-      await expect(client.approve(USER_CODE)).rejects.toThrow(
+      await expect(client.approve(USER_CODE, VERIFICATION_NUMBER)).rejects.toThrow(
         DeviceFlowClientError,
       );
     });
@@ -238,7 +257,7 @@ describe("DeviceFlowMobileClient", () => {
       const client = new DeviceFlowMobileClient(makeConfig());
 
       try {
-        await client.approve(USER_CODE);
+        await client.approve(USER_CODE, VERIFICATION_NUMBER);
         expect.unreachable("Should have thrown");
       } catch (err) {
         expect((err as DeviceFlowClientError).message).toContain("/approve");
@@ -256,7 +275,7 @@ describe("DeviceFlowMobileClient", () => {
       const client = new DeviceFlowMobileClient(
         makeConfig({ endpoint: "https://auth.example.com/device///" }),
       );
-      await client.approve(USER_CODE);
+      await client.approve(USER_CODE, VERIFICATION_NUMBER);
 
       const [url] = vi.mocked(globalThis.fetch).mock.calls[0]!;
       expect(url).toBe("https://auth.example.com/device/approve");

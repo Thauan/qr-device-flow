@@ -18,6 +18,7 @@ function makeDeviceCodeResponse(
       "https://example.com/verify?code=ABCD-EFGH",
     expires_in: 120,
     interval: 5,
+    verification_number: "42",
     ...overrides,
   };
 }

@@ -90,6 +90,12 @@ function setup(opts: { renderQr?: (d: string) => Promise<string> } = {}) {
     renderQr: opts.renderQr,
   });
 
+  /**
+   * Browser binding cookies, by device code. Like a real browser, the cookie
+   * set by POST /code is sent back on the requests for that challenge.
+   */
+  const cookies = new Map<string, string>();
+
   /** Calls a mounted route and resolves once its handler has finished. */
   async function call(
     method: "GET" | "POST",
@@ -99,11 +105,29 @@ function setup(opts: { renderQr?: (d: string) => Promise<string> } = {}) {
     const route = app.routes.find((r) => r.method === method && r.path === path);
     if (!route) throw new Error(`no route ${method} ${path}`);
     const { res, state } = fakeRes();
-    await route.handler(request(req), res);
+    await route.handler(withCookie(req), res);
+    if (path.endsWith("/code")) rememberCookie(state);
     return state;
   }
 
-  return { server, app, call };
+  function rememberCookie(state: { headers: Record<string, string>; body: unknown }) {
+    const setCookie = state.headers["Set-Cookie"];
+    const deviceCode = (state.body as { device_code?: string } | undefined)?.device_code;
+    if (!setCookie || !deviceCode) return;
+    cookies.set(deviceCode, setCookie.split(";")[0]!);
+  }
+
+  function withCookie(req: Partial<DeviceFlowRequest>): DeviceFlowRequest {
+    const deviceCode =
+      (req.query?.device_code as string | undefined) ??
+      (req.body as { device_code?: string } | undefined)?.device_code;
+    const cookie = deviceCode ? cookies.get(deviceCode) : undefined;
+    const headers = { ...(req.headers ?? {}) } as Record<string, unknown>;
+    if (cookie && headers.cookie === undefined) headers.cookie = cookie;
+    return request({ ...req, headers });
+  }
+
+  return { server, app, call, cookies, withCookie, rememberCookie };
 }
 
 async function createChallenge(call: ReturnType<typeof setup>["call"]) {
@@ -115,6 +139,7 @@ async function createChallenge(call: ReturnType<typeof setup>["call"]) {
     device_code: string;
     user_code: string;
     verification_uri_complete: string;
+    verification_number: string;
   };
 }
 
@@ -197,7 +222,7 @@ describe("mountDeviceFlowRoutes: request/response", () => {
 
     const state = await call("POST", "/device/scan", {
       headers: { authorization: "Bearer user-1" },
-      body: { user_code: challenge.user_code },
+      body: { user_code: challenge.user_code, verification_number: challenge.verification_number },
     });
 
     expect(state.statusCode).toBe(200);
@@ -210,7 +235,7 @@ describe("mountDeviceFlowRoutes: request/response", () => {
   it("scan, approve and deny require an authenticated user", async () => {
     const { call } = setup();
     const challenge = await createChallenge(call);
-    const body = { user_code: challenge.user_code };
+    const body = { user_code: challenge.user_code, verification_number: challenge.verification_number };
 
     for (const path of ["/device/scan", "/device/approve", "/device/deny"]) {
       const state = await call("POST", path, { body });
@@ -225,7 +250,11 @@ describe("mountDeviceFlowRoutes: request/response", () => {
 
     const approve = await call("POST", "/device/approve", {
       headers: { authorization: "Bearer real-user" },
-      body: { user_code: challenge.user_code, user_id: "attacker" },
+      body: {
+        user_code: challenge.user_code,
+        verification_number: challenge.verification_number,
+        user_id: "attacker",
+      },
     });
     expect(approve.statusCode).toBe(200);
 
@@ -244,7 +273,7 @@ describe("mountDeviceFlowRoutes: request/response", () => {
     const challenge = await createChallenge(call);
     await call("POST", "/device/approve", {
       headers: { authorization: "Bearer u" },
-      body: { user_code: challenge.user_code },
+      body: { user_code: challenge.user_code, verification_number: challenge.verification_number },
     });
 
     const first = await call("POST", "/device/consume", {
@@ -261,10 +290,147 @@ describe("mountDeviceFlowRoutes: request/response", () => {
     const { call } = setup();
     const state = await call("POST", "/device/approve", {
       headers: { authorization: "Bearer u" },
-      body: { user_code: "ZZZZ-ZZZZ" },
+      body: { user_code: "ZZZZ-ZZZZ", verification_number: "07" },
     });
     expect(state.statusCode).toBe(400);
     expect(state.body).toMatchObject({ code: "invalid_user_code" });
+  });
+});
+
+describe("browser binding and number matching", () => {
+  async function approveWith(
+    call: ReturnType<typeof setup>["call"],
+    challenge: { user_code: string },
+    verificationNumber: string | undefined,
+  ) {
+    return call("POST", "/device/approve", {
+      headers: { authorization: "Bearer u" },
+      body: { user_code: challenge.user_code, verification_number: verificationNumber },
+    });
+  }
+
+  it("POST /code sets an HttpOnly, SameSite=Strict cookie scoped to the API path, Secure by default", async () => {
+    const { call } = setup();
+    const state = await call("POST", "/device/code");
+    const cookie = state.headers["Set-Cookie"]!;
+
+    expect(cookie).toMatch(/^qrdf_bind=[A-Za-z0-9_-]{43}; /);
+    expect(cookie).toContain("Path=/device");
+    expect(cookie).toContain("HttpOnly");
+    expect(cookie).toContain("SameSite=Strict");
+    expect(cookie).toContain("Secure");
+    expect(cookie).toMatch(/Max-Age=120/);
+  });
+
+  it("the Secure attribute can be turned off for plain-HTTP development", async () => {
+    const storage = new MemoryStorage();
+    const server = new DeviceFlowServer({
+      storage,
+      verificationUri: "http://localhost/connect",
+      issueSession: async () => ({ accessToken: "t" }),
+    });
+    const app = fakeApp();
+    mountDeviceFlowRoutes(app, { server, authenticate: () => null, secureCookies: false });
+    const route = app.routes.find((r) => r.path === "/device/code")!;
+    const { res, state } = fakeRes();
+    await route.handler(request(), res);
+    expect(state.headers["Set-Cookie"]).not.toContain("Secure");
+  });
+
+  it("status requires the browser's binding cookie", async () => {
+    const { call, app, server } = setup();
+    const challenge = await createChallenge(call);
+
+    const withoutCookie = await call("GET", "/device/status", {
+      query: { device_code: challenge.device_code },
+      headers: { cookie: "unrelated=1" },
+    });
+    expect(withoutCookie.statusCode).toBe(400);
+    expect(withoutCookie.body).toMatchObject({ code: "invalid_binding" });
+
+    const wrongCookie = await call("GET", "/device/status", {
+      query: { device_code: challenge.device_code },
+      headers: { cookie: "qrdf_bind=not-the-secret" },
+    });
+    expect(wrongCookie.statusCode).toBe(400);
+    expect(wrongCookie.body).toMatchObject({ code: "invalid_binding" });
+
+    // The right cookie (the one the browser got) works.
+    const ok = await call("GET", "/device/status", { query: { device_code: challenge.device_code } });
+    expect(ok.body).toEqual({ status: "pending" });
+    expect(server).toBeDefined();
+    expect(app).toBeDefined();
+  });
+
+  it("a copied device_code can't be consumed from another browser", async () => {
+    const { call } = setup();
+    const challenge = await createChallenge(call);
+    await approveWith(call, challenge, challenge.verification_number);
+
+    const stolen = await call("POST", "/device/consume", {
+      headers: { cookie: "qrdf_bind=attacker-guess" },
+      body: { device_code: challenge.device_code },
+    });
+    expect(stolen.statusCode).toBe(400);
+    expect(stolen.body).toMatchObject({ code: "invalid_binding" });
+
+    // The originating browser still gets the session.
+    const ok = await call("POST", "/device/consume", { body: { device_code: challenge.device_code } });
+    expect(ok.statusCode).toBe(200);
+  });
+
+  it("the SSE stream is refused for a foreign browser, before any event is sent", async () => {
+    const harness = setup();
+    const challenge = await createChallenge(harness.call);
+    const route = harness.app.routes.find((r) => r.path === "/device/events")!;
+    const { res, state } = fakeRes();
+    await route.handler(request({ query: { device_code: challenge.device_code }, headers: {} }), res);
+
+    expect(state.statusCode).toBe(400);
+    expect(state.body).toMatchObject({ code: "invalid_binding" });
+    expect(state.chunks).toEqual([]);
+  });
+
+  it("a wrong verification number is rejected and the challenge stays pending", async () => {
+    const { call } = setup();
+    const challenge = await createChallenge(call);
+    const wrong = challenge.verification_number === "00" ? "01" : "00";
+
+    const state = await approveWith(call, challenge, wrong);
+    expect(state.statusCode).toBe(400);
+    expect(state.body).toMatchObject({ code: "invalid_verification_number" });
+
+    const status = await call("GET", "/device/status", { query: { device_code: challenge.device_code } });
+    expect(status.body).toEqual({ status: "pending" });
+  });
+
+  it("three wrong numbers deny the challenge, even if the right number comes next", async () => {
+    const { call } = setup();
+    const challenge = await createChallenge(call);
+    const wrong = challenge.verification_number === "00" ? "01" : "00";
+
+    for (let i = 0; i < 3; i++) {
+      await approveWith(call, challenge, wrong);
+    }
+    const status = await call("GET", "/device/status", { query: { device_code: challenge.device_code } });
+    expect(status.body).toEqual({ status: "denied" });
+
+    const late = await approveWith(call, challenge, challenge.verification_number);
+    expect(late.statusCode).toBe(400);
+    expect(late.body).toMatchObject({ code: "invalid_transition" });
+  });
+
+  it("approve requires a two-digit verification number", async () => {
+    const { call } = setup();
+    const challenge = await createChallenge(call);
+
+    const missing = await approveWith(call, challenge, undefined);
+    expect(missing.statusCode).toBe(400);
+    expect(missing.body).toMatchObject({ code: "invalid_request" });
+
+    const malformed = await approveWith(call, challenge, "7");
+    expect(malformed.statusCode).toBe(400);
+    expect(malformed.body).toMatchObject({ code: "invalid_verification_number" });
   });
 });
 
@@ -280,20 +446,20 @@ describe("mountDeviceFlowRoutes: GET /events (SSE)", () => {
   });
 
   function openStream(
-    call: ReturnType<typeof setup>["call"],
-    app: ReturnType<typeof setup>["app"],
+    harness: ReturnType<typeof setup>,
     deviceCode: string,
   ) {
-    const route = app.routes.find((r) => r.path === "/device/events")!;
+    const route = harness.app.routes.find((r) => r.path === "/device/events")!;
     const { res, state } = fakeRes();
-    void route.handler(request({ query: { device_code: deviceCode } }), res);
+    void route.handler(harness.withCookie({ query: { device_code: deviceCode } }), res);
     return state;
   }
 
   it("sends SSE headers, the initial status, and closes on approval", async () => {
-    const { call, app } = setup();
+    const harness = setup();
+    const { call, app } = harness;
     const challenge = await createChallenge(call);
-    const stream = openStream(call, app, challenge.device_code);
+    const stream = openStream(harness, challenge.device_code);
     await vi.advanceTimersByTimeAsync(0);
 
     expect(stream.headers["Content-Type"]).toBe("text/event-stream");
@@ -303,7 +469,7 @@ describe("mountDeviceFlowRoutes: GET /events (SSE)", () => {
 
     await call("POST", "/device/approve", {
       headers: { authorization: "Bearer u" },
-      body: { user_code: challenge.user_code },
+      body: { user_code: challenge.user_code, verification_number: challenge.verification_number },
     });
     await vi.advanceTimersByTimeAsync(1000);
 
@@ -312,9 +478,10 @@ describe("mountDeviceFlowRoutes: GET /events (SSE)", () => {
   });
 
   it("emits 'expired' and closes when the TTL passes", async () => {
-    const { call, app } = setup();
+    const harness = setup();
+    const { call, app } = harness;
     const challenge = await createChallenge(call);
-    const stream = openStream(call, app, challenge.device_code);
+    const stream = openStream(harness, challenge.device_code);
     await vi.advanceTimersByTimeAsync(0);
 
     await vi.advanceTimersByTimeAsync(121_000);
@@ -324,9 +491,10 @@ describe("mountDeviceFlowRoutes: GET /events (SSE)", () => {
   });
 
   it("stops checking storage when the client disconnects", async () => {
-    const { call, app } = setup();
+    const harness = setup();
+    const { call, app } = harness;
     const challenge = await createChallenge(call);
-    const stream = openStream(call, app, challenge.device_code);
+    const stream = openStream(harness, challenge.device_code);
     await vi.advanceTimersByTimeAsync(0);
 
     stream.closeListeners.forEach((l) => l());
@@ -346,5 +514,95 @@ describe("mountDeviceFlowRoutes: GET /events (SSE)", () => {
     expect(state.statusCode).toBe(400);
     expect(state.headers["Content-Type"]).toBeUndefined();
     expect(state.chunks).toEqual([]);
+  });
+});
+
+describe("verification off (server policy none)", () => {
+  function setupNone() {
+    const storage = new MemoryStorage();
+    const server = new DeviceFlowServer({
+      storage,
+      verificationUri: "https://app.example.com/connect",
+      verification: "none",
+      issueSession: async ({ userId }) => ({ accessToken: `token-${userId}` }),
+    });
+    const app = fakeApp();
+    mountDeviceFlowRoutes(app, {
+      server,
+      authenticate: (req) => {
+        const auth = req.headers.authorization;
+        return typeof auth === "string" && auth.startsWith("Bearer ") ? auth.slice(7) : null;
+      },
+    });
+    // Like a browser: the binding cookie from /code goes back on later requests.
+    let cookie: string | undefined;
+    const call = async (method: "GET" | "POST", path: string, req: Partial<DeviceFlowRequest> = {}) => {
+      const route = app.routes.find((r) => r.method === method && r.path === path)!;
+      const { res, state } = fakeRes();
+      await route.handler(request({ ...req, headers: { ...(req.headers ?? {}), ...(cookie ? { cookie } : {}) } }), res);
+      if (path === "/device/code" && state.headers["Set-Cookie"]) {
+        cookie = state.headers["Set-Cookie"].split(";")[0];
+      }
+      return state;
+    };
+    return { call };
+  }
+
+  it("/code returns a null verification_number", async () => {
+    const { call } = setupNone();
+    const state = await call("POST", "/device/code");
+    expect((state.body as { verification_number: unknown }).verification_number).toBeNull();
+  });
+
+  it("/approve works without verification_number", async () => {
+    const { call } = setupNone();
+    const challenge = (await call("POST", "/device/code")).body as { device_code: string; user_code: string };
+
+    const approve = await call("POST", "/device/approve", {
+      headers: { authorization: "Bearer alice" },
+      body: { user_code: challenge.user_code },
+    });
+    expect(approve.statusCode).toBe(200);
+
+    const consume = await call("POST", "/device/consume", { body: { device_code: challenge.device_code } });
+    expect(consume.body).toMatchObject({ access_token: "token-alice" });
+  });
+
+  it("/scan tells the phone that no number is needed", async () => {
+    const { call } = setupNone();
+    const challenge = (await call("POST", "/device/code")).body as { user_code: string };
+    const scan = await call("POST", "/device/scan", {
+      headers: { authorization: "Bearer alice" },
+      body: { user_code: challenge.user_code },
+    });
+    expect(scan.body).toMatchObject({ verification: "none" });
+  });
+});
+
+describe("requester origin", () => {
+  it("the consent details name the site that asked for the login", async () => {
+    const harness = setup();
+    const created = await harness.call("POST", "/device/code", {
+      headers: { origin: "https://app.example.com" },
+    });
+    const challenge = created.body as { user_code: string };
+
+    const scan = await harness.call("POST", "/device/scan", {
+      headers: { authorization: "Bearer alice" },
+      body: { user_code: challenge.user_code },
+    });
+    expect(scan.body).toMatchObject({
+      requester_info: { origin: "https://app.example.com" },
+    });
+  });
+
+  it("the origin is optional: a request without one has no origin", async () => {
+    const harness = setup();
+    const challenge = (await harness.call("POST", "/device/code")).body as { user_code: string };
+    const scan = await harness.call("POST", "/device/scan", {
+      headers: { authorization: "Bearer alice" },
+      body: { user_code: challenge.user_code },
+    });
+    expect((scan.body as { requester_info: { origin?: string } }).requester_info.origin).toBeUndefined();
   });
 });

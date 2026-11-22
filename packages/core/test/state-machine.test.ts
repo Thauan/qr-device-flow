@@ -14,6 +14,9 @@ function makeChallenge(overrides: Partial<Challenge> = {}): Challenge {
     expiresAt: T0 + TTL_MS,
     userId: null,
     requesterInfo: {},
+    verificationNumber: "07",
+    bindingHash: null,
+    numberFailures: 0,
     ...overrides,
   };
 }

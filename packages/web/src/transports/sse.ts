@@ -17,7 +17,7 @@ export class SSETransport implements Transport {
   private errorCallback: ((error: Error) => void) | null = null;
   private eventSource: EventSource | null = null;
 
-  constructor(endpoint: string) {
+  constructor(endpoint: string, private readonly credentials: RequestCredentials = "same-origin") {
     this.endpoint = endpoint;
   }
 
@@ -31,7 +31,7 @@ export class SSETransport implements Transport {
 
   connect(deviceCode: string, _interval: number): void {
     const url = `${this.endpoint}/events?device_code=${encodeURIComponent(deviceCode)}`;
-    this.eventSource = new EventSource(url);
+    this.eventSource = new EventSource(url, { withCredentials: this.credentials === "include" });
 
     this.eventSource.addEventListener("status", (event: MessageEvent) => {
       try {

@@ -13,7 +13,8 @@
   },
   "files": [
     "dist",
-    "README.md"
+    "README.md",
+    "LICENSE"
   ],
   "scripts": {
     "build": "tsdown && tsc -p tsconfig.build.json",
@@ -23,7 +24,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@qr-device-flow/web": "workspace:*"
+    "@qr-device-flow/web": "workspace:^"
   },
   "keywords": [
     "qr",
@@ -39,5 +40,15 @@
     "tsdown": "^0.12.0",
     "typescript": "^5.4.0",
     "vitest": "^3.2.0"
+  },
+  "author": "Thauan Almeida",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Thauan/qr-device-flow.git",
+    "directory": "packages/element"
+  },
+  "homepage": "https://github.com/Thauan/qr-device-flow/tree/main/packages/element#readme",
+  "bugs": {
+    "url": "https://github.com/Thauan/qr-device-flow/issues"
   }
 }

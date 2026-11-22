@@ -37,6 +37,10 @@ export function isRequesterInfo(data: unknown): data is RequesterInfo {
     return false;
   }
 
+  if ("origin" in obj && typeof obj.origin !== "string") {
+    return false;
+  }
+
   return true;
 }
 

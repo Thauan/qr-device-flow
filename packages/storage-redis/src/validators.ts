@@ -60,6 +60,10 @@ function isRequesterInfo(data: unknown): data is RequesterInfo {
     return false;
   }
 
+  if ("origin" in obj && typeof obj.origin !== "string") {
+    return false;
+  }
+
   return true;
 }
 
@@ -90,6 +94,15 @@ export function isChallenge(data: unknown): data is Challenge {
     "userId" in data &&
     ((data as any).userId === null || typeof (data as any).userId === "string") &&
     "requesterInfo" in data &&
-    isRequesterInfo((data as any).requesterInfo)
+    isRequesterInfo((data as any).requesterInfo) &&
+    "verificationNumber" in data &&
+    ((data as any).verificationNumber === null ||
+      (typeof (data as any).verificationNumber === "string" &&
+        /^\d{2}$/.test((data as any).verificationNumber))) &&
+    "bindingHash" in data &&
+    ((data as any).bindingHash === null || typeof (data as any).bindingHash === "string") &&
+    "numberFailures" in data &&
+    Number.isInteger((data as any).numberFailures) &&
+    (data as any).numberFailures >= 0
   );
 }

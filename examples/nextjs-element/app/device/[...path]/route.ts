@@ -6,7 +6,9 @@ export const dynamic = "force-dynamic";
 
 const API_URL = process.env.API_URL ?? "http://localhost:3100";
 
-const FORWARDED_HEADERS = ["content-type", "authorization", "user-agent", "accept"];
+// "cookie" carries the browser-binding cookie in; set-cookie comes back out below.
+// "origin" tells the API which page asked for the login (shown on the consent screen).
+const FORWARDED_HEADERS = ["content-type", "authorization", "user-agent", "accept", "cookie", "origin"];
 
 async function proxy(
   req: NextRequest,
@@ -36,6 +38,11 @@ async function proxy(
   const responseHeaders = new Headers();
   const contentType = upstream.headers.get("content-type");
   if (contentType) responseHeaders.set("content-type", contentType);
+  // The browser-binding cookie must reach the browser: it is scoped to /device,
+  // which is this proxy's path too.
+  for (const cookie of upstream.headers.getSetCookie()) {
+    responseHeaders.append("set-cookie", cookie);
+  }
   responseHeaders.set("cache-control", "no-cache, no-transform");
   responseHeaders.set("x-accel-buffering", "no");
 

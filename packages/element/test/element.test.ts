@@ -23,6 +23,8 @@ interface FakeServer {
 function installFakeServer(opts: {
   statusFor?: (deviceCode: string, poll: number) => "pending" | "scanned" | "approved" | "denied" | "expired";
   createStatus?: number;
+  /** Server runs with verification "none": no number is issued. */
+  withoutNumber?: boolean;
 } = {}): FakeServer {
   const server: FakeServer = { createCalls: 0, statusCalls: 0, consumeCalls: 0, challenges: [] };
   const polls = new Map<string, number>();
@@ -45,6 +47,7 @@ function installFakeServer(opts: {
         verification_uri_complete: `https://mobile.example.com/connect?user_code=${challenge.userCode}`,
         expires_in: 120,
         interval: 5,
+        verification_number: opts.withoutNumber ? null : String(10 + n).padStart(2, "0"), // "11", "12", …
       });
     }
 
@@ -171,9 +174,20 @@ describe("<qr-device-login>", () => {
       expect(part(el, "qr").getAttribute("src")).toMatch(/^data:image\/svg\+xml;base64,/);
       expect(part(el, "qr").hidden).toBe(false);
       expect(part(el, "code").textContent).toBe("CODE-0001");
+      expect(part(el, "number").hidden).toBe(false);
+      expect(part(el, "number-value").textContent).toBe("11");
       expect(part(el, "status").textContent).toContain("Scan the code");
       expect(el.dataset.state).toBe("pending");
       expect(part(el, "retry").hidden).toBe(true);
+    });
+
+    it("hides the verification number once the login is over", async () => {
+      installFakeServer({ statusFor: () => "denied" });
+      const el = await mount();
+      await flush(0);
+
+      expect(el.dataset.state).toBe("denied");
+      expect(part(el, "number").hidden).toBe(true);
     });
 
     it("emits qr-approved with the session, and never renders the token", async () => {
@@ -239,6 +253,15 @@ describe("<qr-device-login>", () => {
       expect(server.createCalls).toBe(2);
       expect(part(el, "code").textContent).toBe("CODE-0002");
       expect(el.dataset.state).toBe("pending");
+    });
+  });
+
+  describe("verification off", () => {
+    it("hides the number when the server issues none", async () => {
+      installFakeServer({ withoutNumber: true });
+      const el = await mount();
+      expect(part(el, "code").textContent).toBe("CODE-0001");
+      expect(part(el, "number").hidden).toBe(true);
     });
   });
 

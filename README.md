@@ -86,27 +86,32 @@ const flow = new QRDeviceFlow({
 flow.start({ container: "#qr-box" });
 
 // Or headless (bring your own UI)
-const { qrDataUrl, userCode, expiresAt } = await flow.startHeadless();
+const { qrDataUrl, userCode, verificationNumber, expiresAt } = await flow.startHeadless();
 ```
+
+Show `verificationNumber` (two digits) next to the QR code. The user has to type it on the phone before approving, which is how the flow stops a QR code shown from someone else's screen.
 
 ### 3. Mobile (React Native)
 
 ```tsx
-import { DeviceFlowMobileClient } from "@qr-device-flow/react-native";
-import { QRScanner } from "@qr-device-flow/react-native";
+import { DeviceFlowMobileClient, QRScanner } from "@qr-device-flow/react-native";
 
 const client = new DeviceFlowMobileClient({
-  baseUrl: "https://api.example.com/device",
-  getAuthToken: () => userToken,
+  endpoint: "https://api.example.com/device",
+  getAuthToken: () => userToken, // the logged-in user's token
 });
 
 <QRScanner
   onScan={async (userCode) => {
-    const details = await client.scan(userCode);
-    // Show consent screen with details.requesterInfo
-    const approved = await showConsentScreen(details);
-    if (approved) {
-      await client.approve(userCode);
+    // 1. Notify the server and get the request details for the consent screen
+    const details = await client.fetchChallengeDetails(userCode);
+
+    // 2. The user reviews details.requesterInfo, then types the two-digit number
+    //    shown on the login screen. Deny if they don't approve.
+    const decision = await showConsentScreen(details); // { approve: true, number: "07" } | { approve: false }
+
+    if (decision.approve) {
+      await client.approve(userCode, decision.number);
     } else {
       await client.deny(userCode);
     }
@@ -144,13 +149,17 @@ Or without Docker (in-memory storage): `pnpm install && pnpm --filter qr-device-
 - **`compareAndSwap` atomicity** -- storage layer guarantees single-use consumption, even under concurrent requests.
 - **Dual export in core** -- `@qr-device-flow/core` exposes only types/constants for client bundles; `@qr-device-flow/core/server` adds the state machine and code generators.
 - **`issueSession` is your callback** -- the library never emits tokens. It signals "this user approved this challenge" and your auth system issues the session.
+- **Browser binding** -- the session can only be claimed by the browser that created the challenge, through an HttpOnly cookie. A copied `device_code` is not enough.
+- **Number matching** -- the phone must type the two-digit number shown on the browser before approving. A QR code shown from another screen can't be approved silently. Servers can turn it off with `verification: "none"`, which leaves the consent screen as the only check.
 
 ## Security
 
-- **HTTPS required in production.** The library refuses to operate over plain HTTP except on `localhost`.
+- **HTTPS required in production.** The library does not enforce it. The `Secure` cookie flag and the QR code's destination depend on it.
 - **`userId` from session, not body.** The mobile app's `Authorization` header is the source of truth. Never trust a `user_id` field in the request body.
+- **Browser binding and number matching.** See [PROTOCOL.md](./PROTOCOL.md#browser-binding-and-number-matching).
 - **Single-use tokens.** `compareAndSwap` ensures only one consumer claims the session.
-- **Rate limiting.** The server does not enforce rate limits -- integrators should add rate limiting on `POST /device/code` to prevent abuse.
+- **Rate limiting.** The server does not enforce rate limits -- integrators should add rate limiting on `POST /device/code`, `GET /device/status`, `GET /device/events` and `POST /device/approve`.
+- **Threat model.** What is and isn't protected, with the residual risks, is in [THREAT_MODEL.md](./THREAT_MODEL.md).
 
 ## Native clients
 

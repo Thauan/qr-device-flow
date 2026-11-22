@@ -105,6 +105,7 @@ export class QRDeviceFlow {
       userCode: challenge.user_code,
       deviceCode: challenge.device_code,
       expiresAt: Date.now() + challenge.expires_in * 1000,
+      verificationNumber: challenge.verification_number,
     };
   }
 
@@ -128,6 +129,7 @@ export class QRDeviceFlow {
     const res = await fetch(`${this.options.endpoint}/code`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      credentials: this.options.credentials,
     });
 
     if (!res.ok) {
@@ -225,12 +227,12 @@ export class QRDeviceFlow {
     const { endpoint, transport: type } = this.options;
     switch (type) {
       case "sse":
-        return new SSETransport(endpoint);
+        return new SSETransport(endpoint, this.options.credentials);
       case "websocket":
         return new WebSocketTransport(endpoint);
       case "polling":
       default:
-        return new PollingTransport(endpoint);
+        return new PollingTransport(endpoint, this.options.credentials);
     }
   }
 
@@ -240,6 +242,7 @@ export class QRDeviceFlow {
     try {
       const res = await fetch(`${this.options.endpoint}/consume`, {
         method: "POST",
+        credentials: this.options.credentials,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ device_code: deviceCode }),
       });

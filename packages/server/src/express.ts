@@ -32,6 +32,7 @@ import { ProtocolError } from "@qr-device-flow/core";
 import { assertValidDeviceCode } from "@qr-device-flow/core/server";
 import type { DeviceFlowServer } from "./server.js";
 import { effectiveStatus, streamChallengeStatus } from "./status-stream.js";
+import { BINDING_COOKIE, createBindingSecret, hashBindingSecret } from "./binding.js";
 
 // ── Minimal structural types (no `express` dependency) ─────────────
 
@@ -79,6 +80,13 @@ export interface MountDeviceFlowOptions {
   ssePollIntervalMs?: number;
 
   /**
+   * Adds the Secure attribute to the binding cookie. Keep this true in
+   * production (HTTPS). Set it to false only for plain-HTTP development.
+   * Defaults to true.
+   */
+  secureCookies?: boolean;
+
+  /**
    * Optional QR renderer. When provided, `/code` also returns `qr_svg`.
    * Browsers using `@qr-device-flow/web` don't need it.
    */
@@ -121,6 +129,20 @@ function requireString(value: unknown, name: string): string {
   return value;
 }
 
+/** Value of a cookie from the Cookie header, or undefined. */
+function readCookie(req: DeviceFlowRequest, name: string): string | undefined {
+  const header = req.headers.cookie;
+  if (typeof header !== "string") return undefined;
+  for (const part of header.split(";")) {
+    const index = part.indexOf("=");
+    if (index === -1) continue;
+    if (part.slice(0, index).trim() === name) {
+      return decodeURIComponent(part.slice(index + 1).trim());
+    }
+  }
+  return undefined;
+}
+
 function bodyField(req: DeviceFlowRequest, name: string): unknown {
   const body = req.body;
   if (typeof body === "object" && body !== null) {
@@ -151,6 +173,7 @@ export function mountDeviceFlowRoutes(
 ): void {
   const { server, authenticate } = opts;
   const base = (opts.basePath ?? "/device").replace(/\/+$/, "");
+  const secureCookies = opts.secureCookies ?? true;
 
   app.post(`${base}/code`, async (req, res) => {
     try {
@@ -158,8 +181,25 @@ export function mountDeviceFlowRoutes(
       const userAgent = header(req, "user-agent");
       if (userAgent) requesterInfo.userAgent = userAgent;
       if (req.ip) requesterInfo.ip = req.ip;
+      // The page asking for the login, so the consent screen can name the site.
+      const origin = header(req, "origin");
+      if (origin) requesterInfo.origin = origin;
 
-      const challenge = await server.createChallenge(requesterInfo);
+      // The browser that asks for the code also gets the binding secret, as an
+      // HttpOnly cookie. Only its hash is stored, on the challenge.
+      const bindingSecret = createBindingSecret();
+      const challenge = await server.createChallenge(requesterInfo, { bindingSecret });
+
+      const cookie = [
+        `${BINDING_COOKIE}=${bindingSecret}`,
+        `Path=${base}`,
+        "HttpOnly",
+        "SameSite=Strict",
+        `Max-Age=${challenge.expires_in}`,
+        ...(secureCookies ? ["Secure"] : []),
+      ].join("; ");
+      res.setHeader("Set-Cookie", cookie);
+
       const body: Record<string, unknown> = { ...challenge };
       if (opts.renderQr) {
         body.qr_svg = await opts.renderQr(challenge.verification_uri_complete);
@@ -173,20 +213,26 @@ export function mountDeviceFlowRoutes(
   app.get(`${base}/status`, async (req, res) => {
     try {
       const deviceCode = requireString(req.query.device_code, "device_code");
-      const challenge = await server.getStatus(deviceCode);
+      const challenge = await server.requireBinding(deviceCode, readCookie(req, BINDING_COOKIE));
       res.json({ status: effectiveStatus(challenge, Date.now()) });
     } catch (err) {
       sendError(res, err);
     }
   });
 
-  app.get(`${base}/events`, (req, res) => {
+  app.get(`${base}/events`, async (req, res) => {
     let deviceCode: string;
     try {
       deviceCode = requireString(req.query.device_code, "device_code");
-      // Only malformed codes are rejected here. Unknown or expired codes get
-      // an `expired` event on the stream, which is what the browser expects.
+      // Malformed codes and foreign browsers are rejected before the stream opens.
       assertValidDeviceCode(deviceCode);
+      try {
+        await server.requireBinding(deviceCode, readCookie(req, BINDING_COOKIE));
+      } catch (err) {
+        // Unknown or expired codes are not an error here: the stream reports
+        // them as an `expired` event, which is what the browser expects.
+        if (!(err instanceof ProtocolError && err.code === "expired_token")) throw err;
+      }
     } catch (err) {
       sendError(res, err);
       return;
@@ -221,6 +267,7 @@ export function mountDeviceFlowRoutes(
   app.post(`${base}/consume`, async (req, res) => {
     try {
       const deviceCode = requireString(bodyField(req, "device_code"), "device_code");
+      await server.requireBinding(deviceCode, readCookie(req, BINDING_COOKIE));
       const session = await server.consume(deviceCode);
       res.json({
         access_token: session.accessToken,
@@ -240,6 +287,8 @@ export function mountDeviceFlowRoutes(
       res.json({
         requester_info: challenge.requesterInfo,
         expires_at: challenge.expiresAt,
+        // Tells the phone whether to ask for the number before approving.
+        verification: server.verificationMode,
       });
     } catch (err) {
       sendError(res, err);
@@ -250,7 +299,12 @@ export function mountDeviceFlowRoutes(
     try {
       const userId = await requireUser(req, authenticate);
       const userCode = requireString(bodyField(req, "user_code"), "user_code");
-      await server.approve(userCode, userId);
+      // The number is required only when the server runs with verification "number".
+      const verificationNumber =
+        server.verificationMode === "number"
+          ? requireString(bodyField(req, "verification_number"), "verification_number")
+          : undefined;
+      await server.approve(userCode, userId, verificationNumber);
       res.json({ ok: true });
     } catch (err) {
       sendError(res, err);

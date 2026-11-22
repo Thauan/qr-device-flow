@@ -81,7 +81,11 @@ export function isDeviceCodeResponse(data: unknown): data is DeviceCodeResponse 
     (data as any).expires_in > 0 &&
     "interval" in data &&
     typeof (data as any).interval === "number" &&
-    (data as any).interval > 0
+    (data as any).interval > 0 &&
+    "verification_number" in data &&
+    ((data as any).verification_number === null ||
+      (typeof (data as any).verification_number === "string" &&
+        /^\d{2}$/.test((data as any).verification_number)))
   );
 }
 
@@ -144,6 +148,10 @@ export function isRequesterInfo(data: unknown): data is RequesterInfo {
   }
 
   if ("approxLocation" in obj && typeof obj.approxLocation !== "string") {
+    return false;
+  }
+
+  if ("origin" in obj && typeof obj.origin !== "string") {
     return false;
   }
 

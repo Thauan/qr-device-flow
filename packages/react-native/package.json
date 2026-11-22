@@ -17,7 +17,8 @@
   },
   "files": [
     "dist",
-    "README.md"
+    "README.md",
+    "LICENSE"
   ],
   "scripts": {
     "build": "tsdown && tsc -p tsconfig.build.json",
@@ -27,7 +28,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@qr-device-flow/core": "workspace:*"
+    "@qr-device-flow/core": "workspace:^"
   },
   "peerDependencies": {
     "expo-camera": ">=15.0.0",
@@ -55,5 +56,15 @@
     "react-native",
     "mobile"
   ],
-  "license": "MIT"
+  "license": "MIT",
+  "author": "Thauan Almeida",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Thauan/qr-device-flow.git",
+    "directory": "packages/react-native"
+  },
+  "homepage": "https://github.com/Thauan/qr-device-flow/tree/main/packages/react-native#readme",
+  "bugs": {
+    "url": "https://github.com/Thauan/qr-device-flow/issues"
+  }
 }

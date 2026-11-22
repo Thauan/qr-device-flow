@@ -28,7 +28,7 @@ export class PollingTransport implements Transport {
   private timerId: ReturnType<typeof setTimeout> | null = null;
   private stopped = false;
 
-  constructor(endpoint: string) {
+  constructor(endpoint: string, private readonly credentials: RequestCredentials = "same-origin") {
     this.endpoint = endpoint;
   }
 
@@ -49,7 +49,7 @@ export class PollingTransport implements Transport {
 
       try {
         const url = `${this.endpoint}/status?device_code=${encodeURIComponent(deviceCode)}`;
-        const res = await fetch(url);
+        const res = await fetch(url, { credentials: this.credentials });
         if (!res.ok) {
           // The server reports an expired/unknown challenge as 400 expired_token.
           // That is a status, not a transport failure.

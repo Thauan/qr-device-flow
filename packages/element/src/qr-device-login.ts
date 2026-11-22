@@ -88,6 +88,8 @@ const STYLE = `
     letter-spacing: 0.15em;
     margin: 0 0 12px;
   }
+  .number { font-size: 0.95rem; margin: 0 0 10px; color: var(--qr-muted); }
+  .number strong { font-size: 1.6rem; letter-spacing: 0.1em; color: var(--qr-text); }
   .status { font-size: 0.95rem; min-height: 1.4em; margin: 0 0 10px; color: var(--qr-muted); }
   :host([data-state="scanned"]) .status { color: var(--qr-warn); }
   :host([data-state="logged-in"]) .status,
@@ -113,6 +115,7 @@ const TEMPLATE = `
   <section class="card" part="card">
     <img part="qr" alt="Login QR code" hidden />
     <p part="code" class="code" hidden></p>
+    <p part="number" class="number" hidden>Confirm on your phone: <strong part="number-value"></strong></p>
     <p part="status" class="status" role="status" aria-live="polite"></p>
     <p part="error" class="error" role="alert" hidden></p>
     <button part="retry" type="button" hidden>Try again</button>
@@ -137,6 +140,8 @@ export class QrDeviceLoginElement extends HTMLElement {
 
   readonly #qr: HTMLImageElement;
   readonly #code: HTMLElement;
+  readonly #number: HTMLElement;
+  readonly #numberValue: HTMLElement;
   readonly #status: HTMLElement;
   readonly #error: HTMLElement;
   readonly #retry: HTMLButtonElement;
@@ -152,6 +157,8 @@ export class QrDeviceLoginElement extends HTMLElement {
     root.innerHTML = TEMPLATE;
     this.#qr = root.querySelector("img")!;
     this.#code = root.querySelector('[part="code"]')!;
+    this.#number = root.querySelector('[part="number"]')!;
+    this.#numberValue = root.querySelector('[part="number-value"]')!;
     this.#status = root.querySelector('[part="status"]')!;
     this.#error = root.querySelector('[part="error"]')!;
     this.#retry = root.querySelector("button")!;
@@ -285,18 +292,22 @@ export class QrDeviceLoginElement extends HTMLElement {
       if (status === "denied" || status === "expired" || status === "approved-consumed") {
         this.#qr.hidden = true;
         this.#code.hidden = true;
+        this.#number.hidden = true;
       }
     }
     this.#emit("qr-state", { status });
   }
 
-  #render(result: { qrDataUrl: string; userCode: string }): void {
+  #render(result: { qrDataUrl: string; userCode: string; verificationNumber: string | null }): void {
     this.#clearError();
     this.#qr.src = result.qrDataUrl;
     this.#qr.style.setProperty("--qr-size", `${this.qrSize}px`);
     this.#qr.hidden = false;
     this.#code.textContent = result.userCode;
     this.#code.hidden = false;
+    // No number when the server runs with verification "none".
+    this.#numberValue.textContent = result.verificationNumber ?? "";
+    this.#number.hidden = result.verificationNumber === null;
     this.#retry.hidden = true;
     this.#setState("pending");
   }
@@ -305,6 +316,7 @@ export class QrDeviceLoginElement extends HTMLElement {
     this.#setState("logged-in");
     this.#qr.hidden = true;
     this.#code.hidden = true;
+    this.#number.hidden = true;
     this.#retry.hidden = true;
     this.#emit("qr-approved", { session });
   }

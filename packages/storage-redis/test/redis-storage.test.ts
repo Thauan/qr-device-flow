@@ -114,6 +114,9 @@ function makeChallenge(overrides: Partial<Challenge> = {}): Challenge {
     expiresAt: Date.now() + 300_000, // 5 minutes from now
     userId: null,
     requesterInfo: { userAgent: "test-agent", ip: "127.0.0.1" },
+    verificationNumber: "42",
+    bindingHash: null,
+    numberFailures: 0,
     ...overrides,
   };
 }

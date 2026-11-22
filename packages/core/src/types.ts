@@ -43,6 +43,20 @@ export interface Challenge {
   readonly userId: string | null;
   /** Context about the browser that requested the code (shown on mobile for consent). */
   readonly requesterInfo: RequesterInfo;
+  /**
+   * Two-digit number shown on the browser's login screen. The user must type
+   * it on the phone before approving (number matching). Defends against a QR
+   * code that was shown to the victim from someone else's screen.
+   */
+  readonly verificationNumber: string | null;
+  /**
+   * SHA-256 (hex) of the browser-binding secret. The secret travels only as an
+   * HttpOnly cookie to the browser that created the challenge. Null when the
+   * challenge was created without a binding (library use outside the HTTP layer).
+   */
+  readonly bindingHash: string | null;
+  /** Wrong verification numbers submitted so far. The challenge is denied at the limit. */
+  readonly numberFailures: number;
 }
 
 /**
@@ -54,6 +68,12 @@ export interface RequesterInfo {
   readonly userAgent?: string;
   readonly ip?: string;
   readonly approxLocation?: string; // e.g., "Salvador, BR"
+  /**
+   * Origin of the page that asked for the login (from the request's Origin header),
+   * e.g. "https://app.example.com". Shown on the consent screen so the user can
+   * tell which site is asking. Advisory only: it comes from the browser.
+   */
+  readonly origin?: string;
 }
 
 /**
@@ -70,7 +90,21 @@ export interface DeviceCodeResponse {
   readonly verification_uri_complete: string;
   readonly expires_in: number; // seconds
   readonly interval: number; // seconds
+  /**
+   * Two digits, e.g. "07", when the server runs with `verification: "number"`.
+   * Null when verification is off (`verification: "none"`).
+   */
+  readonly verification_number: string | null;
 }
+
+/**
+ * How the phone confirms a login, decided by the server.
+ *
+ * - `"number"` (default): the phone must type the two-digit number shown on the browser.
+ * - `"none"`: no second check. The consent screen (browser, IP, location) is the only
+ *   confirmation. This is weaker against QR code phishing (see THREAT_MODEL.md).
+ */
+export type VerificationMode = "number" | "none";
 
 /**
  * Events that can be applied to a challenge state, driving transitions.
@@ -93,7 +127,9 @@ export type ProtocolErrorCode =
   | "authorization_denied" //     user explicitly rejected on mobile
   | "authorization_pending" //    polled too early, no decision yet
   | "invalid_user_code" //        format validation failed
-  | "invalid_device_code"; //     format validation failed
+  | "invalid_device_code" //      format validation failed
+  | "invalid_verification_number" // the number typed on the phone doesn't match
+  | "invalid_binding"; //         the request doesn't come from the browser that created the challenge
 
 export class ProtocolError extends Error {
   readonly code: ProtocolErrorCode;

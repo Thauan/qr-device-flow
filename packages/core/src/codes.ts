@@ -12,6 +12,7 @@
 
 import {
   DEVICE_CODE_BYTES,
+  VERIFICATION_NUMBER_LENGTH,
   USER_CODE_ALPHABET,
   USER_CODE_LENGTH,
   USER_CODE_PATTERN,
@@ -27,6 +28,29 @@ export function generateDeviceCode(): string {
   const bytes = new Uint8Array(DEVICE_CODE_BYTES);
   globalThis.crypto.getRandomValues(bytes);
   return base64url(bytes);
+}
+
+/**
+ * Generates the number-matching code shown on the browser ("07").
+ * Uniform over 00–99 (rejection sampling, no modulo bias).
+ */
+export function generateVerificationNumber(): string {
+  const bound = 10 ** VERIFICATION_NUMBER_LENGTH;
+  const range = 0x1_0000_0000;
+  const limit = Math.floor(range / bound) * bound;
+  const word = new Uint32Array(1);
+  for (;;) {
+    globalThis.crypto.getRandomValues(word);
+    const value = word[0]!;
+    if (value < limit) {
+      return String(value % bound).padStart(VERIFICATION_NUMBER_LENGTH, "0");
+    }
+  }
+}
+
+/** True for a well-formed verification number ("07"). Whitespace is not trimmed here. */
+export function isVerificationNumber(input: unknown): input is string {
+  return typeof input === "string" && new RegExp(`^\\d{${VERIFICATION_NUMBER_LENGTH}}$`).test(input);
 }
 
 /**

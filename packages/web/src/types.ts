@@ -43,6 +43,14 @@ export interface QRDeviceFlowOptions {
 
   /** QR code size in pixels. Defaults to `256`. */
   qrSize?: number;
+
+  /**
+   * Whether requests carry cookies. The browser-binding cookie is sent with
+   * same-origin requests by default. Use `"include"` only when the API is on
+   * another origin, and that origin's CORS must allow credentials.
+   * Defaults to `"same-origin"`.
+   */
+  credentials?: "same-origin" | "include";
 }
 
 /**
@@ -70,4 +78,11 @@ export interface HeadlessResult {
 
   /** Epoch-millisecond timestamp when this challenge expires. */
   expiresAt: number;
+
+  /**
+   * Two-digit number to show on this page. The user types it on the phone
+   * before approving (number matching). Null when the server runs with
+   * verification "none", so there is nothing to show.
+   */
+  verificationNumber: string | null;
 }

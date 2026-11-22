@@ -50,6 +50,10 @@ Besides the login page and the phone page, the e2e suite covers `<qr-device-logi
 
 Pages accept `?transport=sse` (default) or `?transport=polling`.
 
+## Credits
+
+The login and phone pages use a visual style adapted from a CodePen pen by Abdelrhman Said (MIT). See [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md).
+
 ## End-to-end tests (Playwright)
 
 The suite is in `e2e/`, and covers the full flow for both SSE and polling:

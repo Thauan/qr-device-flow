@@ -1,4 +1,4 @@
-import type { RequesterInfo } from "@qr-device-flow/core";
+import type { RequesterInfo, VerificationMode } from "@qr-device-flow/core";
 
 /**
  * Configuration for the mobile device flow client.
@@ -20,6 +20,8 @@ export interface ChallengeDetails {
   readonly userCode: string;
   readonly requesterInfo: RequesterInfo;
   readonly expiresAt: number;
+  /** "number": ask the user for the number shown on the browser. "none": approve on consent alone. */
+  readonly verification: VerificationMode;
 }
 
 /**

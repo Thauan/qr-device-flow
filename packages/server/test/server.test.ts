@@ -76,7 +76,7 @@ describe("DeviceFlowServer: happy path", () => {
     const res = await server.createChallenge();
 
     await server.markScanned(res.user_code);
-    await server.approve(res.user_code, "user-42");
+    await server.approve(res.user_code, "user-42", res.verification_number);
     const session = await server.consume(res.device_code);
 
     expect(session.accessToken).toBe("token-for-user-42");
@@ -87,7 +87,7 @@ describe("DeviceFlowServer: happy path", () => {
   it("fast path: create → approve → consume (no scan event)", async () => {
     const { server } = setup();
     const res = await server.createChallenge();
-    await server.approve(res.user_code, "user-7");
+    await server.approve(res.user_code, "user-7", res.verification_number);
     const session = await server.consume(res.device_code);
     expect(session.accessToken).toBe("token-for-user-7");
   });
@@ -96,7 +96,7 @@ describe("DeviceFlowServer: happy path", () => {
     const { server } = setup();
     const res = await server.createChallenge();
     const raw = res.user_code.replace("-", "").toLowerCase();
-    await server.approve(`  ${raw}  `, "u1");
+    await server.approve(`  ${raw}  `, "u1", res.verification_number);
     const session = await server.consume(res.device_code);
     expect(session.accessToken).toBe("token-for-u1");
   });
@@ -139,7 +139,7 @@ describe("DeviceFlowServer: single-use semantics", () => {
   it("second consume throws already_consumed (no second session)", async () => {
     const { server, issueCount } = setup();
     const res = await server.createChallenge();
-    await server.approve(res.user_code, "user-1");
+    await server.approve(res.user_code, "user-1", res.verification_number);
     await server.consume(res.device_code); // first succeeds
 
     try {
@@ -154,8 +154,8 @@ describe("DeviceFlowServer: single-use semantics", () => {
   it("cannot re-approve with a different user after first approval", async () => {
     const { server } = setup();
     const res = await server.createChallenge();
-    await server.approve(res.user_code, "user-1");
-    await expect(server.approve(res.user_code, "user-2"))
+    await server.approve(res.user_code, "user-1", res.verification_number);
+    await expect(server.approve(res.user_code, "user-2", res.verification_number))
       .rejects.toBeInstanceOf(ProtocolError);
   });
 });
@@ -164,7 +164,7 @@ describe("DeviceFlowServer: expiration", () => {
   it("consume after TTL throws expired_token", async () => {
     const { server, clock } = setup({ ttl: 60 });
     const res = await server.createChallenge();
-    await server.approve(res.user_code, "user-1");
+    await server.approve(res.user_code, "user-1", res.verification_number);
 
     clock.advance(61_000); // past TTL
 
@@ -183,7 +183,7 @@ describe("DeviceFlowServer: expiration", () => {
     clock.advance(61_000);
 
     try {
-      await server.approve(res.user_code, "user-1");
+      await server.approve(res.user_code, "user-1", res.verification_number);
       throw new Error("should have thrown");
     } catch (err) {
       expect((err as ProtocolError).code).toBe("expired_token");
@@ -217,7 +217,7 @@ describe("DeviceFlowServer: malformed input", () => {
   it("approve with a malformed user_code throws invalid_user_code", async () => {
     const { server } = setup();
     try {
-      await server.approve("0000-0000", "u1");
+      await server.approve("0000-0000", "u1", "07");
       throw new Error("should have thrown");
     } catch (err) {
       expect((err as ProtocolError).code).toBe("invalid_user_code");
@@ -239,7 +239,7 @@ describe("DeviceFlowServer: malformed input", () => {
   it("approve with empty userId throws", async () => {
     const { server } = setup();
     const res = await server.createChallenge();
-    await expect(server.approve(res.user_code, ""))
+    await expect(server.approve(res.user_code, "", res.verification_number))
       .rejects.toBeInstanceOf(ProtocolError);
   });
 });
@@ -259,7 +259,7 @@ describe("DeviceFlowServer: issueSession is called with correct context", () => 
     });
 
     const res = await server.createChallenge();
-    await server.approve(res.user_code, "alice");
+    await server.approve(res.user_code, "alice", res.verification_number);
     await server.consume(res.device_code);
 
     expect(received).toHaveLength(1);
@@ -267,5 +267,45 @@ describe("DeviceFlowServer: issueSession is called with correct context", () => 
     // Challenge is passed in the approved-consumed state, so integrators
     // can verify the transition was completed before emitting a session.
     expect(received[0]?.challengeStatus).toBe("approved-consumed");
+  });
+});
+
+describe("verification policy", () => {
+  function make(verification?: "number" | "none") {
+    return new DeviceFlowServer({
+      storage: new MemoryStorage(),
+      verificationUri: "https://app.example.com/connect",
+      verification,
+      issueSession: async ({ userId }): Promise<IssuedSession> => ({ accessToken: `token-for-${userId}` }),
+    });
+  }
+
+  it("defaults to verification by number", () => {
+    expect(make().verificationMode).toBe("number");
+  });
+
+  it("with verification none, no number is issued and approval needs none", async () => {
+    const server = make("none");
+    const res = await server.createChallenge();
+    expect(res.verification_number).toBeNull();
+
+    await server.approve(res.user_code, "alice");
+    const session = await server.consume(res.device_code);
+    expect(session.accessToken).toBe("token-for-alice");
+  });
+
+  it("with verification none, a number sent anyway is ignored", async () => {
+    const server = make("none");
+    const res = await server.createChallenge();
+    await server.approve(res.user_code, "alice", "not-a-number");
+    expect((await server.getStatus(res.device_code)).status).toBe("approved");
+  });
+
+  it("with verification number, approval without a number is rejected", async () => {
+    const server = make("number");
+    const res = await server.createChallenge();
+    await expect(server.approve(res.user_code, "alice")).rejects.toThrow(
+      expect.objectContaining({ code: "invalid_verification_number" }) as unknown as Error,
+    );
   });
 });

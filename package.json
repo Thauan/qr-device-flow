@@ -7,9 +7,13 @@
     "build": "turbo run build",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
-    "demo": "pnpm --filter qr-device-flow-example run dev"
+    "demo": "pnpm --filter qr-device-flow-example run dev",
+    "changeset": "changeset",
+    "version-packages": "changeset version",
+    "release": "pnpm build && changeset publish"
   },
   "devDependencies": {
+    "@changesets/cli": "^3.0.3",
     "turbo": "^1.13.4"
   },
   "engines": {

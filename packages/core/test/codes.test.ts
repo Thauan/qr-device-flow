@@ -2,6 +2,8 @@ import { describe, it, expect } from "vitest";
 import {
   generateDeviceCode,
   generateUserCode,
+  generateVerificationNumber,
+  isVerificationNumber,
   normalizeUserCode,
   assertValidDeviceCode,
 } from "../src/codes.js";
@@ -166,5 +168,30 @@ describe("assertValidDeviceCode", () => {
     } catch (err) {
       expect((err as ProtocolError).code).toBe("invalid_device_code");
     }
+  });
+});
+
+describe("verification number", () => {
+  it("is always two digits, zero-padded", () => {
+    for (let i = 0; i < 500; i++) {
+      expect(generateVerificationNumber()).toMatch(/^\d{2}$/);
+    }
+  });
+
+  it("covers the whole 00–99 range (no truncated distribution)", () => {
+    const seen = new Set<string>();
+    for (let i = 0; i < 5000; i++) seen.add(generateVerificationNumber());
+    expect(seen.size).toBe(100);
+  });
+
+  it("validates format strictly", () => {
+    expect(isVerificationNumber("07")).toBe(true);
+    expect(isVerificationNumber("99")).toBe(true);
+    expect(isVerificationNumber("7")).toBe(false);
+    expect(isVerificationNumber("007")).toBe(false);
+    expect(isVerificationNumber(" 07")).toBe(false);
+    expect(isVerificationNumber("0a")).toBe(false);
+    expect(isVerificationNumber(7)).toBe(false);
+    expect(isVerificationNumber(undefined)).toBe(false);
   });
 });

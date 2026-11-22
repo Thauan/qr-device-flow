@@ -14,6 +14,7 @@ const CHALLENGE = {
   verification_uri_complete: "https://example.com/verify?user_code=ABCD-EFGH",
   expires_in: 120,
   interval: 5,
+  verification_number: "42",
 };
 
 function json(body: unknown, status = 200): Response {
@@ -210,5 +211,39 @@ describe("QRDeviceFlow lifecycle", () => {
     expect(polled.at(-1)).toContain("device-2");
 
     flow.destroy();
+  });
+
+  it("startHeadless returns the verification number the phone must confirm", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => json({ ...CHALLENGE, verification_number: "07" })));
+    const flow = new QRDeviceFlow({ endpoint: ENDPOINT, transport: "polling" });
+    const result = await flow.startHeadless();
+    expect(result.verificationNumber).toBe("07");
+    flow.destroy();
+  });
+
+  it("accepts a null verification number (server verification off)", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => json({ ...CHALLENGE, verification_number: null })));
+    const flow = new QRDeviceFlow({ endpoint: ENDPOINT, transport: "polling" });
+    const result = await flow.startHeadless();
+    expect(result.verificationNumber).toBeNull();
+    flow.destroy();
+  });
+
+  it("sends credentials only as configured (cookies stay same-origin by default)", async () => {
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => json(CHALLENGE));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const createCalls = () =>
+      fetchMock.mock.calls.filter((c) => String(c[0]).endsWith("/code")).map((c) => c[1] as RequestInit);
+
+    const sameOrigin = new QRDeviceFlow({ endpoint: ENDPOINT, transport: "polling" });
+    await sameOrigin.startHeadless();
+    expect(createCalls()[0]!.credentials).toBeUndefined(); // fetch default: same-origin
+    sameOrigin.destroy();
+
+    const cross = new QRDeviceFlow({ endpoint: "https://api.example.com/device", transport: "polling", credentials: "include" });
+    await cross.startHeadless();
+    expect(createCalls()[1]!.credentials).toBe("include");
+    cross.destroy();
   });
 });

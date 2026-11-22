@@ -11,20 +11,26 @@ import {
   transition,
   generateDeviceCode,
   generateUserCode,
+  generateVerificationNumber,
   normalizeUserCode,
   assertValidDeviceCode,
+  isVerificationNumber,
 } from "@qr-device-flow/core/server";
 import {
   DEFAULT_TTL_SECONDS,
+  MAX_NUMBER_FAILURES,
   MAX_TTL_SECONDS,
   MIN_POLL_INTERVAL_SECONDS,
   ProtocolError,
+  TERMINAL_STATES,
+  type VerificationMode,
   type Challenge,
   type ChallengeEvent,
   type DeviceCodeResponse,
   type RequesterInfo,
 } from "@qr-device-flow/core";
 import type { ChallengeStorage } from "./storage.js";
+import { hashBindingSecret, timingSafeEqualString } from "./binding.js";
 
 /**
  * A session issued by the integrator's auth system once a challenge
@@ -61,12 +67,21 @@ export interface ServerConfig {
 
   /** Optional: clock injection for testing. Defaults to Date.now. */
   readonly now?: () => number;
+
+  /**
+   * Second check on approval. `"number"` (default): the phone must type the
+   * two-digit number shown on the browser. `"none"`: no second check beyond the
+   * consent screen, which is weaker against QR phishing. This is a server policy:
+   * clients can only display what the server returns.
+   */
+  readonly verification?: VerificationMode;
 }
 
 export class DeviceFlowServer {
   private readonly cfg: ServerConfig;
   private readonly ttlMs: number;
   private readonly now: () => number;
+  private readonly verification: VerificationMode;
 
   constructor(cfg: ServerConfig) {
     const ttl = Math.min(
@@ -79,6 +94,12 @@ export class DeviceFlowServer {
     this.cfg = cfg;
     this.ttlMs = ttl * 1000;
     this.now = cfg.now ?? Date.now;
+    this.verification = cfg.verification ?? "number";
+  }
+
+  /** The second-check policy this server enforces. */
+  get verificationMode(): VerificationMode {
+    return this.verification;
   }
 
   /**
@@ -87,9 +108,11 @@ export class DeviceFlowServer {
    */
   async createChallenge(
     requesterInfo: RequesterInfo = {},
+    options: { bindingSecret?: string } = {},
   ): Promise<DeviceCodeResponse> {
     const deviceCode = generateDeviceCode();
     const userCode = generateUserCode();
+    const verificationNumber = this.verification === "number" ? generateVerificationNumber() : null;
     const now = this.now();
 
     const challenge: Challenge = {
@@ -100,6 +123,9 @@ export class DeviceFlowServer {
       expiresAt: now + this.ttlMs,
       userId: null,
       requesterInfo,
+      verificationNumber,
+      bindingHash: options.bindingSecret ? hashBindingSecret(options.bindingSecret) : null,
+      numberFailures: 0,
     };
 
     await this.cfg.storage.create(challenge);
@@ -117,6 +143,7 @@ export class DeviceFlowServer {
       verification_uri_complete: verificationUriComplete,
       expires_in: Math.floor(this.ttlMs / 1000),
       interval: MIN_POLL_INTERVAL_SECONDS,
+      verification_number: verificationNumber,
     };
   }
 
@@ -135,8 +162,20 @@ export class DeviceFlowServer {
    * The userId MUST come from the mobile app's authenticated session,
    * never from request parameters.
    */
-  async approve(userCode: string, userId: string): Promise<void> {
+  async approve(userCode: string, userId: string, verificationNumber?: string | null): Promise<void> {
     if (!userId) throw new ProtocolError("invalid_transition");
+
+    if (this.verification === "number") {
+      if (!isVerificationNumber(verificationNumber)) {
+        throw new ProtocolError("invalid_verification_number");
+      }
+      const current = await this.findByUserCode(userCode);
+      if (!timingSafeEqualString(current.verificationNumber ?? "", verificationNumber)) {
+        await this.recordWrongNumber(current);
+        throw new ProtocolError("invalid_verification_number");
+      }
+    }
+
     await this.applyEventByUserCode(userCode, { type: "APPROVE", userId });
   }
 
@@ -185,6 +224,21 @@ export class DeviceFlowServer {
     return await this.fetchOrThrow(deviceCode);
   }
 
+  /**
+   * Like getStatus, but also requires the browser-binding secret when the
+   * challenge has one. Throws invalid_binding otherwise.
+   */
+  async requireBinding(deviceCode: string, bindingSecret: string | undefined): Promise<Challenge> {
+    assertValidDeviceCode(deviceCode);
+    const challenge = await this.fetchOrThrow(deviceCode);
+    if (challenge.bindingHash !== null) {
+      if (!bindingSecret || !timingSafeEqualString(hashBindingSecret(bindingSecret), challenge.bindingHash)) {
+        throw new ProtocolError("invalid_binding");
+      }
+    }
+    return challenge;
+  }
+
   // ---- internals ----
 
   private async applyEventByUserCode(
@@ -207,6 +261,33 @@ export class DeviceFlowServer {
       // else: lost the race, re-read and retry
     }
     throw new ProtocolError("invalid_transition", "too many concurrent updates");
+  }
+
+  private async findByUserCode(rawUserCode: string): Promise<Challenge> {
+    const normalized = normalizeUserCode(rawUserCode);
+    const display = normalized.slice(0, 4) + "-" + normalized.slice(4);
+    const challenge = await this.cfg.storage.getByUserCode(display);
+    if (!challenge) throw new ProtocolError("invalid_user_code");
+    return challenge;
+  }
+
+  /**
+   * Counts a wrong verification number. At MAX_NUMBER_FAILURES the challenge
+   * is denied, so a victim's approval can't be brute-forced.
+   */
+  private async recordWrongNumber(seen: Challenge): Promise<void> {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const latest = await this.cfg.storage.getByDeviceCode(seen.deviceCode);
+      if (!latest || TERMINAL_STATES.has(latest.status)) return;
+
+      const failures = latest.numberFailures + 1;
+      const next: Challenge = failures >= MAX_NUMBER_FAILURES
+        ? { ...transition(latest, { type: "DENY" }, this.now()), numberFailures: failures }
+        : { ...latest, numberFailures: failures };
+
+      const swap = await this.cfg.storage.compareAndSwap(latest.deviceCode, latest, next);
+      if (swap.ok || swap.current === null) return;
+    }
   }
 
   private async fetchOrThrow(deviceCode: string): Promise<Challenge> {

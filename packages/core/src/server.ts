@@ -11,13 +11,18 @@
  */
 
 export { transition, isTerminal } from "./state-machine.js";
+export type { VerificationMode } from "./types.js";
 export {
   generateDeviceCode,
   generateUserCode,
+  generateVerificationNumber,
   normalizeUserCode,
   assertValidDeviceCode,
+  isVerificationNumber,
 } from "./codes.js";
 export {
   DEVICE_CODE_BYTES,
   USER_CODE_ALPHABET,
+  VERIFICATION_NUMBER_LENGTH,
+  MAX_NUMBER_FAILURES,
 } from "./constants.js";

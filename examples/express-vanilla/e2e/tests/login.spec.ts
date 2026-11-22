@@ -22,6 +22,8 @@ for (const transport of TRANSPORTS) {
       const { context, phone } = await openPhone(browser, baseURL, login.phonePath, "alice");
 
       await reviewOnPhone(phone);
+      // The consent screen names the site that asked (the login page's origin).
+      await expect(phone.getByTestId("requester-origin")).toContainText("localhost");
       await approveOnPhone(phone, login.verificationNumber);
       await expect(phone.getByTestId("feedback")).toContainText("Login approved");
 
@@ -102,7 +104,7 @@ test("an unanswered login expires and says so", async ({ page }) => {
 });
 
 test.describe("browser binding and number matching", () => {
-  test("a wrong number is rejected on the phone, and the login stays pending", async ({ page, browser, baseURL }) => {
+  test("a wrong number is rejected on the phone, and the login stays scanned", async ({ page, browser, baseURL }) => {
     const login = await startWebLogin(page, "sse");
     const wrong = login.verificationNumber === "00" ? "01" : "00";
     const { context, phone } = await openPhone(browser, baseURL, login.phonePath, "alice");
@@ -110,7 +112,7 @@ test.describe("browser binding and number matching", () => {
     await reviewOnPhone(phone);
     await approveOnPhone(phone, wrong);
     await expect(phone.getByTestId("feedback")).toContainText("invalid_verification_number");
-    await expect(page.getByTestId("status")).toHaveAttribute("data-state", "pending");
+    await expect(page.getByTestId("status")).toHaveAttribute("data-state", "scanned");
 
     await context.close();
   });
@@ -153,5 +155,21 @@ test.describe("browser binding and number matching", () => {
     expect(status.status()).toBe(400);
     expect(await status.json()).toMatchObject({ code: "invalid_binding" });
     await stranger.dispose();
+  });
+});
+
+test.describe("approval needs a deliberate hold", () => {
+  test("a quick tap on approve does not approve the login (stays scanned)", async ({ page, browser, baseURL }) => {
+    const login = await startWebLogin(page, "sse");
+    const { context, phone } = await openPhone(browser, baseURL, login.phonePath, "alice");
+    await reviewOnPhone(phone);
+    await phone.getByTestId("number-input").fill(login.verificationNumber);
+
+    await phone.getByTestId("approve-btn").click(); // a tap, not a hold
+    await phone.waitForTimeout(1500);
+
+    await expect(phone.getByTestId("feedback")).toBeHidden();
+    await expect(page.getByTestId("status")).toHaveAttribute("data-state", "scanned");
+    await context.close();
   });
 });

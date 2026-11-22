@@ -23,6 +23,9 @@ function challenge(overrides: Partial<Challenge> = {}): Challenge {
     expiresAt: now + 60_000,
     userId: null,
     requesterInfo: {},
+    verificationNumber: "07",
+    bindingHash: null,
+    numberFailures: 0,
     ...overrides,
   };
 }
@@ -82,5 +85,21 @@ describe.skipIf(!REDIS_URL)("RedisStorage (real Redis, Lua CAS)", () => {
     const c = challenge();
     const result = await storage.compareAndSwap(c.deviceCode, c, { ...c, status: "scanned" });
     expect(result).toEqual({ ok: false, current: null });
+  });
+});
+
+describe.skipIf(!REDIS_URL)("RedisStorage with verification off", () => {
+  it("stores and reads a challenge without a verification number", async () => {
+    const redis = new Redis(REDIS_URL!, { maxRetriesPerRequest: 1 });
+    const storage = new RedisStorage({ redis, prefix: `test-none-${Date.now()}:` });
+    try {
+      const c = challenge({ verificationNumber: null });
+      await storage.create(c);
+      expect((await storage.getByDeviceCode(c.deviceCode))?.verificationNumber).toBeNull();
+    } finally {
+      const keys = await redis.keys(`test-none-*`);
+      if (keys.length) await redis.del(...keys);
+      redis.disconnect();
+    }
   });
 });

@@ -12,6 +12,7 @@ export type {
   DeviceCodeResponse,
   RequesterInfo,
   ProtocolErrorCode,
+  VerificationMode,
 } from "./types.js";
 
 export { ProtocolError } from "./types.js";
@@ -24,4 +25,6 @@ export {
   USER_CODE_LENGTH,
   USER_CODE_PATTERN,
   DEVICE_CODE_PATTERN,
+  VERIFICATION_NUMBER_LENGTH,
+  MAX_NUMBER_FAILURES,
 } from "./constants.js";

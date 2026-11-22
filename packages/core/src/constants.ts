@@ -46,6 +46,12 @@ export const USER_CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"; // 31 chars
  */
 export const DEVICE_CODE_BYTES = 32;
 
+/** Digits in the number-matching code shown on the browser ("07"). */
+export const VERIFICATION_NUMBER_LENGTH = 2;
+
+/** Wrong numbers allowed on approval before the challenge is denied. */
+export const MAX_NUMBER_FAILURES = 3;
+
 /**
  * Regex matching a well-formed user_code (with optional dash in the middle).
  * Codes are rendered as "ABCD-EFGH" for readability but may be submitted

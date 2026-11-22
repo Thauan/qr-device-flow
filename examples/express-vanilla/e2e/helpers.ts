@@ -78,8 +78,23 @@ export async function reviewOnPhone(phone: Page): Promise<void> {
   await expect(phone.getByTestId("consent")).toBeVisible();
 }
 
-/** The phone types the number from the login screen, then approves. */
+/**
+ * Approving takes a one-second hold on the button (see mobile.ts). A click is
+ * not enough, so this holds the mouse down past the threshold.
+ */
+export async function holdToApprove(phone: Page): Promise<void> {
+  const button = phone.getByTestId("approve-btn");
+  await button.scrollIntoViewIfNeeded();
+  const box = await button.boundingBox();
+  if (!box) throw new Error("approve button is not visible");
+  await phone.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await phone.mouse.down();
+  await phone.waitForTimeout(1300); // longer than the one-second hold
+  await phone.mouse.up();
+}
+
+/** The phone types the number from the login screen, then holds approve. */
 export async function approveOnPhone(phone: Page, verificationNumber: string): Promise<void> {
   await phone.getByTestId("number-input").fill(verificationNumber);
-  await phone.getByTestId("approve-btn").click();
+  await holdToApprove(phone);
 }

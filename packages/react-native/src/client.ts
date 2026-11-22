@@ -59,15 +59,23 @@ export class DeviceFlowMobileClient {
       userCode,
       requesterInfo: body.requester_info,
       expiresAt: body.expires_at,
+      // Older servers don't send this field; the default is the stricter check.
+      verification: (body as { verification?: unknown }).verification === "none" ? "none" : "number",
     };
   }
 
   /**
    * Approves the challenge after the user has reviewed the consent screen.
-   * The server identifies the approving user via the Bearer token.
+   * `verificationNumber` is the two-digit number shown on the browser; the user
+   * must type it on the phone when `fetchChallengeDetails` reports verification
+   * "number". Omit it when verification is "none". The server identifies the approving user via the
+   * Bearer token. A wrong number is rejected, and three wrong numbers deny the
+   * challenge.
    */
-  async approve(userCode: string): Promise<void> {
-    await this.#post("/approve", { user_code: userCode });
+  async approve(userCode: string, verificationNumber?: string): Promise<void> {
+    const body: Record<string, unknown> = { user_code: userCode };
+    if (verificationNumber !== undefined) body.verification_number = verificationNumber;
+    await this.#post("/approve", body);
   }
 
   /**

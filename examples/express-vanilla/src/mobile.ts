@@ -53,6 +53,7 @@ function showConsent(details: ChallengeDetails): void {
   verification = details.verification;
   el("number-field").hidden = verification === "none";
   const info = details.requesterInfo;
+  el("requester-origin").textContent = info.origin ?? "unknown site";
   el("requester-agent").textContent = info.userAgent ?? "unknown browser";
   el("requester-ip").textContent = info.ip ?? "unknown";
   el("requester-location").textContent = info.approxLocation ?? "unknown";
@@ -88,13 +89,14 @@ el("review-btn").addEventListener("click", async () => {
 
 // Step 2: the user reviewed the consent screen, types the number shown on the
 // login screen, and approves or denies.
-el("approve-btn").addEventListener("click", async () => {
+async function approve(): Promise<void> {
   if (!userCodeFromUrl) return;
   let verificationNumber: string | undefined;
   if (verification === "number") {
     const typed = el<HTMLInputElement>("number-input").value.trim();
     if (!/^\d{2}$/.test(typed)) {
       feedback("Type the two-digit number shown on the login screen.", "error");
+      resetApproveButton();
       return;
     }
     verificationNumber = typed;
@@ -107,7 +109,73 @@ el("approve-btn").addEventListener("click", async () => {
   } catch (err) {
     feedback(`Approval failed: ${describeError(err)}`, "error");
     setBusy(false);
+    resetApproveButton();
   }
+}
+
+// Approving takes a one-second hold, so a stray tap or a click from a
+// script can't approve. Keyboard users hold Space or Enter.
+const HOLD_MS = 1000;
+let holdFrame: number | undefined;
+let holdStartedAt = 0;
+
+function setProgress(progress: number): void {
+  el("approve-btn").style.setProperty("--p", String(progress));
+}
+
+/** Back to the start: no fill, no check, ready for another hold. */
+function resetApproveButton(): void {
+  if (holdFrame !== undefined) cancelAnimationFrame(holdFrame);
+  holdFrame = undefined;
+  el("approve-btn").classList.remove("done");
+  setProgress(0);
+}
+
+function tick(now: number): void {
+  const progress = Math.min(1, (now - holdStartedAt) / HOLD_MS);
+  setProgress(progress);
+  if (progress >= 1) {
+    holdFrame = undefined;
+    completeHold();
+    return;
+  }
+  holdFrame = requestAnimationFrame(tick);
+}
+
+function startHold(): void {
+  const button = el<HTMLButtonElement>("approve-btn");
+  if (holdFrame !== undefined || button.disabled || button.classList.contains("done")) return;
+  holdStartedAt = performance.now();
+  holdFrame = requestAnimationFrame(tick);
+}
+
+function cancelHold(): void {
+  // Once the hold has completed there is nothing to cancel: the check stays until approve() settles.
+  if (holdFrame === undefined) return;
+  cancelAnimationFrame(holdFrame);
+  holdFrame = undefined;
+  setProgress(0);
+}
+
+function completeHold(): void {
+  el("approve-btn").classList.add("done");
+  setProgress(1);
+  void approve();
+}
+
+const approveButton = el("approve-btn");
+approveButton.addEventListener("pointerdown", startHold);
+approveButton.addEventListener("pointerup", cancelHold);
+approveButton.addEventListener("pointerleave", cancelHold);
+approveButton.addEventListener("pointercancel", cancelHold);
+approveButton.addEventListener("keydown", (event) => {
+  if ((event.key === " " || event.key === "Enter") && !event.repeat) {
+    event.preventDefault();
+    startHold();
+  }
+});
+approveButton.addEventListener("keyup", (event) => {
+  if (event.key === " " || event.key === "Enter") cancelHold();
 });
 
 el("deny-btn").addEventListener("click", async () => {

@@ -3,100 +3,96 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap">
   <title>QR Device Flow — Mobile app (demo)</title>
   <style>
-    :root {
-      --bg: #f5f6fa;
-      --card: #ffffff;
-      --text: #1a1b23;
-      --muted: #5f6370;
-      --accent: #2563eb;
-      --danger: #b91c1c;
-      --ok: #15803d;
-      --border: #d7dae3;
+/* Visual style adapted from the CodePen "Phone Verification with OTP" by Abdelrhman Said
+   (MIT License), https://codepen.io/abdelrhmansaid/pen/JjJpxXb — see THIRD_PARTY_NOTICES.md */
+  :root {
+    --bg: #EAF5F6;
+    --card: #ffffff;
+    --text: #093030;
+    --muted: #6b8080;
+    --subtle: #B5BAB8;
+    --accent: #3DAFE1;
+    --ok: #15803d;
+    --warn: #b45309;
+    --err: #c2410c;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0b1d1e; --card: #122a2b; --text: #EAF5F6; --muted: #9fb5b5; --subtle: #56706f;
+      --accent: #3DAFE1; --ok: #4ade80; --warn: #fbbf24; --err: #fb923c;
     }
-    @media (prefers-color-scheme: dark) {
-      :root:not([data-theme="light"]) {
-        --bg: #0f1117;
-        --card: #181b24;
-        --text: #e7e9ef;
-        --muted: #9aa0ad;
-        --accent: #60a5fa;
-        --danger: #f87171;
-        --ok: #4ade80;
-        --border: #2d3140;
-      }
-    }
-    :root[data-theme="dark"] {
-      --bg: #0f1117;
-      --card: #181b24;
-      --text: #e7e9ef;
-      --muted: #9aa0ad;
-      --accent: #60a5fa;
-      --danger: #f87171;
-      --ok: #4ade80;
-      --border: #2d3140;
-    }
-    * { box-sizing: border-box; }
-    body {
-      margin: 0;
-      min-height: 100vh;
-      display: grid;
-      place-items: center;
-      padding: 16px;
-      background: var(--bg);
-      color: var(--text);
-      font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
-    }
-    main {
-      width: 100%;
-      max-width: 380px;
-      background: var(--card);
-      border-radius: 16px;
-      padding: 24px;
-      box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08);
-    }
-    h1 { font-size: 1.1rem; margin: 0 0 16px; text-align: center; }
-    label { display: block; font-size: 0.8rem; color: var(--muted); margin-bottom: 4px; }
-    input {
-      width: 100%;
-      font: inherit;
-      padding: 10px 12px;
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      background: var(--bg);
-      color: var(--text);
-      margin-bottom: 14px;
-    }
-    .code {
-      font-family: ui-monospace, Menlo, monospace;
-      font-size: 1.2rem;
-      letter-spacing: 0.12em;
-      text-align: center;
-      margin: 4px 0 16px;
-    }
-    .consent dl { margin: 0 0 16px; display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; font-size: 0.85rem; }
-    .consent dt { color: var(--muted); }
-    .consent dd { margin: 0; word-break: break-word; }
-    .warning { font-size: 0.8rem; color: var(--muted); margin-bottom: 14px; }
-    .actions { display: flex; gap: 10px; }
-    button {
-      flex: 1;
-      font: inherit;
-      padding: 12px;
-      border: 0;
-      border-radius: 10px;
-      background: var(--accent);
-      color: #fff;
-      cursor: pointer;
-    }
-    button.secondary { background: transparent; color: var(--danger); border: 1px solid var(--border); }
-    button:disabled { opacity: 0.5; cursor: default; }
-    .feedback { margin-top: 16px; padding: 12px; border-radius: 10px; text-align: center; font-size: 0.9rem; }
-    .feedback-success { color: var(--ok); }
-    .feedback-denied { color: var(--muted); }
-    .feedback-error { color: var(--danger); }
-    [hidden] { display: none !important; }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0b1d1e; --card: #122a2b; --text: #EAF5F6; --muted: #9fb5b5; --subtle: #56706f;
+    --accent: #3DAFE1; --ok: #4ade80; --warn: #fbbf24; --err: #fb923c;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Poppins', system-ui, sans-serif; }
+  body {
+    min-height: 100vh; display: grid; place-items: center; padding: 16px;
+    background-color: var(--bg); color: var(--text);
+  }
+  [hidden] { display: none !important; }
+  main {
+    width: 100%; max-width: 400px; padding: 40px 32px; text-align: center;
+    background-color: var(--card); border-radius: 25px;
+  }
+  /* The approve button must stay in view on a phone-sized screen, so the card stays compact. */
+  h1 { font-size: 28px; font-weight: 700; color: var(--text); margin-bottom: 8px; }
+  .sub, .warning { color: var(--muted); font-size: 14px; margin-bottom: 20px; }
+  label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 6px; text-align: left; }
+  input {
+    width: 100%; padding: 12px 14px; margin-bottom: 16px; font-size: 14px;
+    border: none; border-radius: 5px; background-color: var(--bg); color: var(--text);
+  }
+  input:focus { outline: none; box-shadow: 0 0 0 2px var(--accent); }
+  button {
+    font-weight: 600; cursor: pointer; border: none; border-radius: 10px;
+    padding: 12px 18px; color: #ffffff; background-color: var(--accent);
+  }
+  button:disabled { opacity: 0.5; cursor: default; }
+  button.secondary { background: transparent; color: var(--err); box-shadow: inset 0 0 0 1px var(--subtle); }
+  footer { margin-top: 24px; font-size: 12px; color: var(--subtle); }
+  footer a { color: var(--accent); text-decoration: none; font-weight: 600; }
+  .code { font-family: ui-monospace, Menlo, monospace; font-size: 18px; letter-spacing: 0.15em; text-align: center; margin: 4px 0 16px; }
+  .consent dl { display: grid; grid-template-columns: auto 1fr; gap: 8px 14px; margin: 0 0 16px; font-size: 13px; text-align: left; }
+  .consent dt { color: var(--muted); }
+  .consent dd { margin: 0; word-break: break-word; }
+  /* The number is typed in one box, styled after the OTP fields of the original design. */
+  input#number-input {
+    width: 140px; margin: 0 auto 18px; display: block; padding: 10px 0;
+    font-size: 32px; letter-spacing: 0.5em; text-align: center; background-color: var(--bg);
+  }
+  #number-field label { text-align: center; }
+  .actions { display: flex; gap: 10px; }
+  .actions button { flex: 1; }
+  /* Hold-to-approve: the fill follows the hold (--p, 0 to 1), then a check replaces the label. */
+  .progress-btn { position: relative; overflow: hidden; isolation: isolate; user-select: none; touch-action: none; }
+  .progress-btn .fill {
+    position: absolute; inset: 0; z-index: -1;
+    background: rgba(255, 255, 255, 0.28);
+    transform: scaleX(var(--p, 0)); transform-origin: left center;
+  }
+  .progress-btn .label { transition: opacity 0.2s ease; }
+  .progress-btn .check {
+    position: absolute; left: 50%; top: 50%; width: 28px; height: 28px; margin: -14px 0 0 -14px;
+    fill: none; stroke: currentColor; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round;
+    stroke-dasharray: 30; stroke-dashoffset: 30; opacity: 0;
+  }
+  .progress-btn.done .label { opacity: 0; }
+  .progress-btn.done .check { opacity: 1; animation: draw-check 0.4s ease forwards; }
+  @keyframes draw-check { to { stroke-dashoffset: 0; } }
+  @media (prefers-reduced-motion: reduce) {
+    .progress-btn .label, .progress-btn .check { transition: none; animation: none; }
+    .progress-btn.done .check { stroke-dashoffset: 0; }
+  }
+  .feedback { margin-top: 18px; padding: 12px; border-radius: 10px; font-size: 14px; }
+  .feedback-success { color: var(--ok); }
+  .feedback-denied { color: var(--muted); }
+  .feedback-error { color: var(--err); }
   </style>
 </head>
 <body>
@@ -119,6 +115,7 @@
       <div id="consent" class="consent" data-testid="consent" hidden>
         <p class="warning">Only approve if you are signing in to this browser.</p>
         <dl>
+          <dt>Site</dt><dd id="requester-origin" data-testid="requester-origin">—</dd>
           <dt>Browser</dt><dd id="requester-agent" data-testid="requester-agent">—</dd>
           <dt>IP</dt><dd id="requester-ip" data-testid="requester-ip">—</dd>
           <dt>Location</dt><dd id="requester-location" data-testid="requester-location">—</dd>
@@ -129,9 +126,14 @@
           <input id="number-input" data-testid="number-input" inputmode="numeric" maxlength="2"
             autocomplete="off" placeholder="00" />
         </div>
+        <p class="warning">Hold "Approve" for one second. A quick tap does nothing.</p>
         <div class="actions">
           <button id="deny-btn" class="secondary" data-testid="deny-btn" type="button">Deny</button>
-          <button id="approve-btn" data-testid="approve-btn" type="button">Approve</button>
+          <button id="approve-btn" class="progress-btn" data-testid="approve-btn" type="button" aria-label="Hold to approve">
+            <span class="fill" aria-hidden="true"></span>
+            <span class="label">Hold to approve</span>
+            <svg class="check" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.2 4.2L19 7" /></svg>
+          </button>
         </div>
       </div>
     </div>

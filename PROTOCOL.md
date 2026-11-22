@@ -12,8 +12,22 @@ Two actors interact with the server:
 
 | Actor | Role | Endpoints used |
 |---|---|---|
-| **Browser** (or smart TV, CLI) | Displays QR, polls for approval, claims session | `POST /device/code`, `GET /device/status`, `POST /device/consume` |
-| **Mobile app** (or any authenticated client) | Scans QR, reviews request, approves or denies | `POST /device/scan`, `POST /device/approve`, `POST /device/deny` |
+| **Browser** (or smart TV, CLI) | Displays QR and number, polls for approval, claims session | `POST /device/code`, `GET /device/status`, `GET /device/events`, `POST /device/consume` (the binding cookie is required on all but `/code`) |
+| **Mobile app** (or any authenticated client) | Scans QR, reviews request, types the number, approves or denies | `POST /device/scan`, `POST /device/approve`, `POST /device/deny` |
+
+## Browser binding and number matching
+
+Two controls make a leaked QR code or device code worth little to an attacker. Both are part of the protocol, not options.
+
+**Browser binding.** The `POST /device/code` response sets a cookie, `qrdf_bind`, that only the browser which created the challenge receives. The cookie is `HttpOnly`, `SameSite=Strict`, scoped to the API path, and `Secure` by default. The server stores only its SHA-256 hash. `GET /device/status`, `GET /device/events` and `POST /device/consume` require the cookie, so a `device_code` copied from the browser cannot claim a session anywhere else. A request without the right cookie gets `400 invalid_binding`.
+
+**Number matching.** The `POST /device/code` response includes a two-digit `verification_number`, shown on the browser next to the QR code. The phone must send that number with `POST /device/approve`. A wrong number is rejected (`invalid_verification_number`), and the third wrong number denies the challenge. A QR code shown from another screen does not show the number, so an approval from it fails.
+
+**Verification policy.** The server decides the second check, with its `verification` option: `"number"` (the default, described above) or `"none"`. With `"none"`, `/code` returns `"verification_number": null`, `/scan` returns `"verification": "none"`, and `/approve` doesn't need a number. The consent screen (browser, IP, location) becomes the only confirmation. That is weaker against QR phishing, so it is an explicit choice. The binding cookie still applies in both modes.
+
+Cross-origin browsers must send credentials for the cookie to be included. Serving the API and the login page under the same origin is the simplest setup.
+
+See [THREAT_MODEL.md](./THREAT_MODEL.md) for what these controls do and do not cover.
 
 ## State machine
 
@@ -61,8 +75,17 @@ If `requester_info` is omitted, the server should populate it from the HTTP requ
   "verification_uri": "https://app.example.com/connect",
   "verification_uri_complete": "https://app.example.com/connect?user_code=ABCD-EFGH",
   "expires_in": 120,
-  "interval": 5
+  "interval": 5,
+  "verification_number": "07"
 }
+```
+
+With `verification: "none"` on the server, `verification_number` is `null`.
+
+The response also sets the binding cookie:
+
+```http
+Set-Cookie: qrdf_bind=<secret>; Path=/device; HttpOnly; SameSite=Strict; Max-Age=120; Secure
 ```
 
 | Field | Type | Description |
@@ -73,12 +96,13 @@ If `requester_info` is omitted, the server should populate it from the HTTP requ
 | `verification_uri_complete` | `string` | Full URL with `user_code` embedded. Encode this in the QR code. |
 | `expires_in` | `number` | Challenge lifetime in seconds (max 600). |
 | `interval` | `number` | Minimum polling interval in seconds (always 5). |
+| `verification_number` | `string \| null` | Two digits (`"00"`–`"99"`). Shown on the browser, and the phone must send it with `/approve`. `null` when the server runs with `verification: "none"`. |
 
 ---
 
 ### `GET /device/status`
 
-Polls the current status of a challenge. Called by the **browser** at the `interval` rate.
+Polls the current status of a challenge. Called by the **browser** at the `interval` rate. The request must carry the binding cookie set by `POST /device/code`; otherwise the response is `400 invalid_binding`.
 
 **Request:**
 ```http
@@ -138,13 +162,14 @@ data: {"status":"approved"}
 - `: ping` comment lines are sent about every 15 s to keep proxies from closing idle connections.
 - An unknown or expired `device_code` produces a single `expired` event, not an HTTP error.
 - A malformed `device_code` returns `400 invalid_device_code` before the stream opens.
+- The binding cookie is required. A request without it gets `400 invalid_binding` before the stream opens. Browsers send the cookie automatically on same-origin requests.
 - The `EventSource` reconnects on its own. The stream does not need `Last-Event-ID`: a reconnect receives the current status first.
 
 ---
 
 ### `POST /device/consume`
 
-Claims the session after approval. Called by the **browser** exactly once. Atomic — only the first caller succeeds.
+Claims the session after approval. Called by the **browser** exactly once. Atomic — only the first caller succeeds. The request must carry the binding cookie (`400 invalid_binding` otherwise).
 
 **Request:**
 ```http
@@ -176,6 +201,7 @@ The response shape depends on the integrator's `issueSession` callback. The fiel
 | `expired_token` | 400 | Challenge TTL elapsed |
 | `already_consumed` | 400 | Session was already claimed |
 | `invalid_device_code` | 400 | Malformed device_code |
+| `invalid_binding` | 400 | The request doesn't carry the binding cookie of the browser that created the challenge |
 
 ---
 
@@ -203,7 +229,7 @@ The `user_code` accepts any format: with/without dash, lowercase, surrounding sp
 }
 ```
 
-The reference server (`mountDeviceFlowRoutes`) returns `requester_info` and `expires_at` for the consent screen:
+The reference server (`mountDeviceFlowRoutes`) returns `requester_info` and `expires_at` for the consent screen. `requester_info.origin` is the `Origin` header of the `POST /device/code` request (the site that asked for the login). It is advisory: the browser sends it, so the consent screen shows it to the user and no decision depends on it.
 ```json
 {
   "ok": true,
@@ -228,7 +254,7 @@ The reference server (`mountDeviceFlowRoutes`) returns `requester_info` and `exp
 
 ### `POST /device/approve`
 
-Approves the challenge, binding it to the authenticated mobile user. Called by the **mobile app** after the user reviews `requester_info` and taps "Approve".
+Approves the challenge, binding it to the authenticated mobile user. The `/scan` response says whether a number is needed (`verification`). Called by the **mobile app** after the user reviews `requester_info`, types the `verification_number` shown on the browser, and taps "Approve".
 
 **Request:**
 ```http
@@ -237,9 +263,14 @@ Content-Type: application/json
 Authorization: Bearer <mobile_user_token>
 
 {
-  "user_code": "ABCD-EFGH"
+  "user_code": "ABCD-EFGH",
+  "verification_number": "07"
 }
 ```
+
+A wrong `verification_number` leaves the challenge pending and returns `400 invalid_verification_number`. The third wrong number denies the challenge, so later approvals fail with `invalid_transition`.
+
+When the server runs with `verification: "none"`, the `verification_number` field is not needed (and is ignored if sent).
 
 > **Security requirement:** The `userId` MUST come from the authenticated session (the `Authorization` header), never from the request body. The server extracts the user identity from the token, not from client-supplied data.
 
@@ -255,6 +286,7 @@ Authorization: Bearer <mobile_user_token>
 | Code | HTTP | When |
 |---|---|---|
 | `invalid_user_code` | 400 | Code doesn't match the expected format |
+| `invalid_verification_number` | 400 | Missing or wrong number (the third wrong number denies the challenge) |
 | `expired_token` | 400 | Challenge expired |
 | `invalid_transition` | 400 | Challenge already approved/denied/consumed |
 
@@ -307,6 +339,8 @@ Error codes (from RFC 8628 where applicable):
 | `already_consumed` | The session was already claimed |
 | `invalid_device_code` | The `device_code` format is invalid |
 | `invalid_user_code` | The `user_code` format is invalid |
+| `invalid_verification_number` | The number typed on the phone doesn't match (or is malformed) |
+| `invalid_binding` | The request doesn't carry the browser-binding cookie |
 | `invalid_transition` | The requested action isn't allowed in the current state |
 
 ---
@@ -328,7 +362,7 @@ Browser                    Server                    Mobile App
    │                         │                           │
    ├─GET /device/status─────▶│     show consent screen   │
    │◀── { status: scanned } ─┤                           │
-   │                         │      user taps approve    │
+   │                         │  user types number, taps  │
    │                         │◀──POST /device/approve────┤
    │                         ├──── { ok: true } ────────▶│
    │                         │                           │
@@ -377,13 +411,17 @@ Browser                    Server                    Mobile App
 
 ## Security considerations
 
-1. **HTTPS required in production.** The library refuses to operate over plain HTTP except on `localhost`.
+1. **HTTPS required in production.** The library does not enforce it. The `Secure` cookie flag, and the trust in the QR code's destination, depend on TLS. Deploy the server behind HTTPS.
 
 2. **`userId` from session, not body.** The mobile app's `Authorization` header is the source of truth for who is approving. Never trust a `user_id` field in the request body in production — the POC example does this for simplicity only.
 
 3. **No auto-approve.** The mobile app MUST show a consent screen with `requester_info` (browser, OS, location) before approving. This is an architectural decision, not configurable.
 
 4. **Single-use tokens.** `compareAndSwap` guarantees that only one consumer claims the session, even under concurrent requests.
+
+   **Browser binding.** The session can only be claimed with the binding cookie of the browser that created the challenge. A copied `device_code` is not enough.
+
+   **Number matching.** Approval needs the number shown on the browser. A QR code shown elsewhere can't be approved silently.
 
 5. **Short TTL.** Challenges expire in 120s by default (max 600s). This limits the phishing window.
 
@@ -412,11 +450,12 @@ scanReq.httpBody = try JSONEncoder().encode(["user_code": userCode])
 let (_, _) = try await URLSession.shared.data(for: scanReq)
 
 // 3. Show consent screen with requester_info, then:
+// 3. Approve, with the two-digit number the user typed from the login screen
 var approveReq = URLRequest(url: URL(string: "\(baseURL)/device/approve")!)
 approveReq.httpMethod = "POST"
 approveReq.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
 approveReq.setValue("application/json", forHTTPHeaderField: "Content-Type")
-approveReq.httpBody = try JSONEncoder().encode(["user_code": userCode])
+approveReq.httpBody = try JSONEncoder().encode(["user_code": userCode, "verification_number": typedNumber])
 let (_, _) = try await URLSession.shared.data(for: approveReq)
 ```
 
@@ -438,7 +477,8 @@ client.newCall(Request.Builder()
 ).execute()
 
 // 3. Show consent screen, then:
-val approveBody = """{"user_code":"$userCode"}""".toRequestBody("application/json".toMediaType())
+// Approve, with the two-digit number the user typed from the login screen
+val approveBody = """{"user_code":"$userCode","verification_number":"$typedNumber"}""".toRequestBody("application/json".toMediaType())
 client.newCall(Request.Builder()
     .url("$baseURL/device/approve")
     .post(approveBody)
@@ -451,6 +491,6 @@ client.newCall(Request.Builder()
 
 ## Compatibility with RFC 8628
 
-This protocol follows RFC 8628 with one extension: the `scanned` state (between `pending` and `approved`). A standard RFC 8628 client that ignores the `scanned` state will work without modification.
+This protocol follows RFC 8628 with these extensions: the `scanned` state (between `pending` and `approved`), the browser-binding cookie, and the verification number on approval. A standard RFC 8628 client that ignores the `scanned` state will still work for polling, but it can't complete approval without the verification number, and it needs the binding cookie to read the status.
 
 The `user_code` and `device_code` fields match the RFC naming. The `verification_uri` and `verification_uri_complete` follow RFC 8628 §3.2. The `interval` field follows RFC 8628 §3.5.

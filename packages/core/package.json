@@ -15,7 +15,11 @@
       "import": "./dist/server.js"
     }
   },
-  "files": ["dist", "README.md"],
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "build": "tsdown && tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
@@ -23,12 +27,28 @@
     "test:watch": "vitest",
     "clean": "rm -rf dist"
   },
-  "keywords": ["qr", "auth", "rfc8628", "device-flow", "cross-device"],
+  "keywords": [
+    "qr",
+    "auth",
+    "rfc8628",
+    "device-flow",
+    "cross-device"
+  ],
   "license": "MIT",
   "devDependencies": {
     "tsdown": "^0.12.0",
     "typescript": "^5.4.0",
     "vitest": "^3.2.0",
     "@types/node": "^20.0.0"
+  },
+  "author": "Thauan Almeida",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Thauan/qr-device-flow.git",
+    "directory": "packages/core"
+  },
+  "homepage": "https://github.com/Thauan/qr-device-flow/tree/main/packages/core#readme",
+  "bugs": {
+    "url": "https://github.com/Thauan/qr-device-flow/issues"
   }
 }

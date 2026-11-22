@@ -29,6 +29,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4 # version comes from "packageManager" in package.json
@@ -50,6 +52,11 @@ jobs:
 
       - name: Run unit tests
         run: pnpm exec turbo run test
+
+      # Every PR that changes a published package needs a changeset.
+      - name: Check changesets
+        if: github.event_name == 'pull_request'
+        run: pnpm changeset status --since=origin/main
 
   # End-to-end tests on the host: Playwright starts the Express and Next.js
   # servers itself (Redis storage, TTL 30 s), and runs Chromium.
