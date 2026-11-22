@@ -1,5 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
-import { openPhone, phonePathFromQr, reviewOnPhone } from "../helpers";
+import { approveOnPhone, openPhone, phonePathFromQr, reviewOnPhone } from "../helpers";
 
 // <qr-device-login> is tested on plain HTML, React 19 and Vue 3.
 // Playwright's locators pierce the element's open shadow root.
@@ -28,10 +28,11 @@ for (const demo of PAGES) {
       const userCode = await waitForCode(page);
       const phonePath = await phonePathFromQr(element(page).locator("img"), userCode);
 
+      const verificationNumber = await element(page).locator('[part="number-value"]').textContent();
       const { context, phone } = await openPhone(browser, baseURL, phonePath, "alice");
       await reviewOnPhone(phone);
       await expect(element(page)).toHaveAttribute("data-state", "scanned");
-      await phone.getByTestId("approve-btn").click();
+      await approveOnPhone(phone, verificationNumber!.trim());
       await expect(phone.getByTestId("feedback")).toContainText("Login approved");
 
       await expect(element(page)).toHaveAttribute("data-state", "logged-in");

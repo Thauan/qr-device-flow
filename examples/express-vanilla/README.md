@@ -45,6 +45,7 @@ Besides the login page and the phone page, the e2e suite covers `<qr-device-logi
 | `REDIS_URL` | — (in-memory) | Redis for challenges |
 | `TTL_SECONDS` | `120` | Challenge lifetime (the library caps it at 600) |
 | `API_URL` (Next.js app) | `http://localhost:3100` | Where the Next.js `/device` proxy forwards requests |
+| `VERIFICATION` | `number` | `number` (the phone types the number shown on the browser) or `none` (consent screen only; weaker against QR phishing, see THREAT_MODEL.md) |
 | `TRUST_PROXY` | — | Set to `1` when one proxy you control is in front of the server. The requester IP then comes from `X-Forwarded-For`. Leave unset otherwise: the header can be forged |
 
 Pages accept `?transport=sse` (default) or `?transport=polling`.

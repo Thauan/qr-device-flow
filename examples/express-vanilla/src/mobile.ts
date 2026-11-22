@@ -46,7 +46,12 @@ function setBusy(busy: boolean): void {
   }
 }
 
+// Set from the server's answer on the consent step: "number" or "none".
+let verification: "number" | "none" = "number";
+
 function showConsent(details: ChallengeDetails): void {
+  verification = details.verification;
+  el("number-field").hidden = verification === "none";
   const info = details.requesterInfo;
   el("requester-agent").textContent = info.userAgent ?? "unknown browser";
   el("requester-ip").textContent = info.ip ?? "unknown";
@@ -81,12 +86,22 @@ el("review-btn").addEventListener("click", async () => {
   }
 });
 
-// Step 2: the user reviewed the consent screen and approves or denies.
+// Step 2: the user reviewed the consent screen, types the number shown on the
+// login screen, and approves or denies.
 el("approve-btn").addEventListener("click", async () => {
   if (!userCodeFromUrl) return;
+  let verificationNumber: string | undefined;
+  if (verification === "number") {
+    const typed = el<HTMLInputElement>("number-input").value.trim();
+    if (!/^\d{2}$/.test(typed)) {
+      feedback("Type the two-digit number shown on the login screen.", "error");
+      return;
+    }
+    verificationNumber = typed;
+  }
   setBusy(true);
   try {
-    await client.approve(userCodeFromUrl);
+    await client.approve(userCodeFromUrl, verificationNumber);
     el("consent").hidden = true;
     feedback("Login approved! You can close this tab.", "success");
   } catch (err) {

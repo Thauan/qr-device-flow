@@ -27,6 +27,8 @@ export type Transport = "sse" | "polling";
 export interface WebLogin {
   /** The code the page shows under the QR. */
   userCode: string;
+  /** The two-digit number the phone must confirm. */
+  verificationNumber: string;
   /** Path + query encoded in the QR, e.g. /mobile.html?user_code=ABCD-EFGH. */
   phonePath: string;
 }
@@ -52,7 +54,13 @@ export async function startWebLogin(page: Page, transport: Transport): Promise<W
   await expect(page.getByTestId("qr")).toHaveAttribute("src", /^data:image\/svg\+xml/);
   await expect(page.getByTestId("user-code")).toHaveText(/^[A-Z0-9]{4}-[A-Z0-9]{4}$/);
   const userCode = (await page.getByTestId("user-code").textContent())!.trim();
-  return { userCode, phonePath: await phonePathFromQr(page.getByTestId("qr"), userCode) };
+  const verificationNumber = await page.getByTestId("verification-number-value").textContent();
+  expect(verificationNumber).toMatch(/^\d{2}$/);
+  return {
+    userCode,
+    verificationNumber: verificationNumber!.trim(),
+    phonePath: await phonePathFromQr(page.getByTestId("qr"), userCode),
+  };
 }
 
 /** Opens the phone page (a separate browser context) and signs in as `userId`. */
@@ -68,4 +76,10 @@ export async function openPhone(browser: Browser, baseURL: string | undefined, p
 export async function reviewOnPhone(phone: Page): Promise<void> {
   await phone.getByTestId("review-btn").click();
   await expect(phone.getByTestId("consent")).toBeVisible();
+}
+
+/** The phone types the number from the login screen, then approves. */
+export async function approveOnPhone(phone: Page, verificationNumber: string): Promise<void> {
+  await phone.getByTestId("number-input").fill(verificationNumber);
+  await phone.getByTestId("approve-btn").click();
 }

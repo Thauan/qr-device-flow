@@ -17,6 +17,9 @@ const apiPort = Number(process.env.E2E_PORT ?? 3100);
 const nextPort = 3200;
 const apiURL = externalApi ?? `http://localhost:${apiPort}`;
 const nextURL = externalNext ?? `http://localhost:${nextPort}`;
+// A second API instance with verification "none" (no number on the login page).
+const externalNone = process.env.E2E_NONE_URL;
+const noneURL = externalNone ?? `http://localhost:${Number(process.env.E2E_NONE_PORT ?? 3101)}`;
 
 const expressDir = fileURLToPath(new URL("..", import.meta.url));
 const nextDir = fileURLToPath(new URL("../../nextjs-element", import.meta.url));
@@ -38,8 +41,14 @@ export default defineConfig({
     {
       // Express pages: login page, plain HTML / React / Vue element pages, mobile page.
       name: "express",
-      testIgnore: /next\.spec\.ts/,
+      testIgnore: /(next|verification-none)\.spec\.ts/,
       use: { ...devices["Desktop Chrome"], baseURL: apiURL },
+    },
+    {
+      // The same pages against the instance with verification off.
+      name: "express-none",
+      testMatch: /verification-none\.spec\.ts/,
+      use: { ...devices["Desktop Chrome"], baseURL: noneURL },
     },
     {
       // The Next.js app, which talks to the API through its own /device proxy.
@@ -49,6 +58,7 @@ export default defineConfig({
     },
   ],
   webServer: [
+    // Main API (login pages, /device, mobile page). Skipped when E2E_BASE_URL is set.
     ...(externalApi
       ? []
       : [
@@ -58,10 +68,30 @@ export default defineConfig({
             url: `${apiURL}/healthz`,
             reuseExistingServer: !process.env.CI,
             // Short TTL so the expiry tests finish in reasonable time.
-            env: { PORT: String(apiPort), TTL_SECONDS: "30", TRUST_PROXY: "1" },
+            env: { PORT: String(apiPort), TTL_SECONDS: "30", TRUST_PROXY: "1", COOKIE_SECURE: "false" },
             timeout: 90_000,
           },
         ]),
+    // API with verification off. Skipped when E2E_NONE_URL is set.
+    ...(externalNone
+      ? []
+      : [
+          {
+            command: "pnpm start",
+            cwd: expressDir,
+            url: `${noneURL}/healthz`,
+            reuseExistingServer: !process.env.CI,
+            env: {
+              PORT: process.env.E2E_NONE_PORT ?? "3101",
+              TTL_SECONDS: "30",
+              TRUST_PROXY: "1",
+              COOKIE_SECURE: "false",
+              VERIFICATION: "none",
+            },
+            timeout: 90_000,
+          },
+        ]),
+    // Next.js app. Skipped when E2E_NEXT_URL is set.
     ...(externalNext
       ? []
       : [

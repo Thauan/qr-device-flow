@@ -1,5 +1,5 @@
-import { test, expect } from "@playwright/test";
-import { openPhone, reviewOnPhone, startWebLogin, type Transport } from "../helpers";
+import { test, expect, request as apiRequest } from "@playwright/test";
+import { API_BASE, approveOnPhone, openPhone, reviewOnPhone, startWebLogin, type Transport } from "../helpers";
 
 // The "web" page is the browser that wants to log in.
 // The "phone" is a separate browser context. It runs the real
@@ -22,7 +22,7 @@ for (const transport of TRANSPORTS) {
       const { context, phone } = await openPhone(browser, baseURL, login.phonePath, "alice");
 
       await reviewOnPhone(phone);
-      await phone.getByTestId("approve-btn").click();
+      await approveOnPhone(phone, login.verificationNumber);
       await expect(phone.getByTestId("feedback")).toContainText("Login approved");
 
       await expect(page.getByTestId("status")).toHaveAttribute("data-state", "logged-in");
@@ -99,4 +99,59 @@ test("an unanswered login expires and says so", async ({ page }) => {
   await startWebLogin(page, "sse");
   await expect(page.getByTestId("status")).toHaveAttribute("data-state", "expired", { timeout: 45_000 });
   await expect(page.getByTestId("retry")).toBeVisible();
+});
+
+test.describe("browser binding and number matching", () => {
+  test("a wrong number is rejected on the phone, and the login stays pending", async ({ page, browser, baseURL }) => {
+    const login = await startWebLogin(page, "sse");
+    const wrong = login.verificationNumber === "00" ? "01" : "00";
+    const { context, phone } = await openPhone(browser, baseURL, login.phonePath, "alice");
+
+    await reviewOnPhone(phone);
+    await approveOnPhone(phone, wrong);
+    await expect(phone.getByTestId("feedback")).toContainText("invalid_verification_number");
+    await expect(page.getByTestId("status")).toHaveAttribute("data-state", "pending");
+
+    await context.close();
+  });
+
+  test("three wrong numbers deny the login, so the right number comes too late", async ({ page, browser, baseURL }) => {
+    const login = await startWebLogin(page, "sse");
+    const wrong = login.verificationNumber === "00" ? "01" : "00";
+    const { context, phone } = await openPhone(browser, baseURL, login.phonePath, "alice");
+    await reviewOnPhone(phone);
+
+    for (let attempt = 0; attempt < 3; attempt++) {
+      await approveOnPhone(phone, wrong);
+      await expect(phone.getByTestId("feedback")).toContainText("invalid_verification_number");
+    }
+    await expect(page.getByTestId("status")).toHaveAttribute("data-state", "denied");
+
+    await approveOnPhone(phone, login.verificationNumber);
+    await expect(phone.getByTestId("feedback")).toContainText("already in terminal state: denied");
+
+    await context.close();
+  });
+
+  test("the binding cookie is HttpOnly, SameSite=Strict and scoped to the API path", async ({ page }) => {
+    await startWebLogin(page, "sse");
+    const cookie = (await page.context().cookies()).find((c) => c.name === "qrdf_bind");
+
+    expect(cookie).toBeDefined();
+    expect(cookie!.httpOnly).toBe(true);
+    expect(cookie!.sameSite).toBe("Strict");
+    expect(cookie!.path).toBe("/device");
+  });
+
+  test("a client without the binding cookie can't read a login's status", async () => {
+    const creator = await apiRequest.newContext({ baseURL: API_BASE });
+    const challenge = await (await creator.post("/device/code")).json();
+    await creator.dispose();
+
+    const stranger = await apiRequest.newContext({ baseURL: API_BASE });
+    const status = await stranger.get(`/device/status?device_code=${challenge.device_code}`);
+    expect(status.status()).toBe(400);
+    expect(await status.json()).toMatchObject({ code: "invalid_binding" });
+    await stranger.dispose();
+  });
 });

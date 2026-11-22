@@ -16,10 +16,14 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // PUBLIC_URL    Base URL encoded in the QR code. Default http://localhost:$PORT.
 // REDIS_URL     Use Redis for challenges. Default: in-memory (single process only).
 // TTL_SECONDS   Challenge lifetime. Default 120 (capped at 600 by the library).
+// VERIFICATION  "number" (default) or "none". See THREAT_MODEL.md before using "none".
 
 const PORT = Number(process.env.PORT ?? 3000);
 const PUBLIC_URL = (process.env.PUBLIC_URL ?? `http://localhost:${PORT}`).replace(/\/+$/, "");
 const TTL_SECONDS = process.env.TTL_SECONDS ? Number(process.env.TTL_SECONDS) : undefined;
+// VERIFICATION=number (default): the phone types the number shown on the browser.
+// VERIFICATION=none: no second check beyond the consent screen (weaker, see THREAT_MODEL.md).
+const VERIFICATION = process.env.VERIFICATION === "none" ? "none" : "number";
 
 let storage: ChallengeStorage;
 let redis: Redis | undefined;
@@ -36,6 +40,7 @@ const server = new DeviceFlowServer({
   storage,
   verificationUri: `${PUBLIC_URL}/mobile.html`,
   ttlSeconds: TTL_SECONDS,
+  verification: VERIFICATION,
   issueSession: async ({ userId }) => ({
     accessToken: `demo-token-${userId}-${Date.now()}`,
     refreshToken: `demo-refresh-${userId}`,
@@ -44,6 +49,11 @@ const server = new DeviceFlowServer({
 });
 
 const app = express();
+// COOKIE_SECURE=true when the demo is served over HTTPS. Plain HTTP (the
+// default for local demos and the e2e run) needs it off, or browsers drop the
+// binding cookie.
+const COOKIE_SECURE = process.env.COOKIE_SECURE === "true";
+
 // TRUST_PROXY=1 when exactly one proxy you control sits in front of this server
 // (e.g. the Next.js app). Then the requester IP comes from X-Forwarded-For.
 // Leave it unset otherwise: with no trusted proxy, the header can be forged.
@@ -61,6 +71,7 @@ app.get("/healthz", (_req, res) => {
 // All /device/* routes: code, status, events (SSE), consume, scan, approve, deny.
 mountDeviceFlowRoutes(app, {
   server,
+  secureCookies: COOKIE_SECURE,
   // Demo only: the mobile page sends `Authorization: Bearer <userId>`.
   // A real app verifies its own session token here.
   authenticate: (req) => {

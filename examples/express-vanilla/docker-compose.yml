@@ -32,6 +32,33 @@ services:
       TTL_SECONDS: "30"
       # The Next.js app sits in front of this server (see the web service).
       TRUST_PROXY: "1"
+      # Plain HTTP between the containers: a Secure cookie would be dropped.
+      COOKIE_SECURE: "false"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/healthz"]
+      interval: 2s
+      timeout: 2s
+      retries: 15
+
+  # A second API instance with verification off, for the verification-none e2e spec.
+  server-none:
+    build:
+      context: ../..
+      dockerfile: examples/express-vanilla/Dockerfile
+      target: app
+    environment:
+      PORT: "3000"
+      PUBLIC_URL: "http://localhost:3001"
+      REDIS_URL: "redis://redis:6379"
+      TTL_SECONDS: "30"
+      TRUST_PROXY: "1"
+      COOKIE_SECURE: "false"
+      VERIFICATION: "none"
+    ports:
+      - "3001:3000"
     depends_on:
       redis:
         condition: service_healthy
@@ -70,9 +97,12 @@ services:
     environment:
       E2E_BASE_URL: "http://server:3000"
       E2E_NEXT_URL: "http://web:3200"
+      E2E_NONE_URL: "http://server-none:3000"
       CI: "1"
     depends_on:
       server:
+        condition: service_healthy
+      server-none:
         condition: service_healthy
       web:
         condition: service_healthy

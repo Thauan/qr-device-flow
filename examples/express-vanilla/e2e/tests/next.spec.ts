@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { API_BASE, decodeQrFrom, openPhone, phonePathFromQr, reviewOnPhone } from "../helpers";
+import { API_BASE, approveOnPhone, openPhone, phonePathFromQr, reviewOnPhone } from "../helpers";
 
 // The Next.js app renders <qr-device-login> on the client only, and reaches
 // the API through its own /device proxy (app/device/[...path]/route.ts).
@@ -58,7 +58,8 @@ test("a phone approves the login, and the Next page gets the session via the pro
   const phonePath = await phonePathFromQr(element(page).locator("img"), userCode);
   const { context, phone } = await openPhone(browser, API_BASE, phonePath, "alice");
   await reviewOnPhone(phone);
-  await phone.getByTestId("approve-btn").click();
+  const verificationNumber = await element(page).locator('[part="number-value"]').textContent();
+  await approveOnPhone(phone, verificationNumber!.trim());
   await expect(phone.getByTestId("feedback")).toContainText("Login approved");
 
   await expect(element(page)).toHaveAttribute("data-state", "logged-in");

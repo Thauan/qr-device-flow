@@ -77,6 +77,7 @@ async function start(): Promise<void> {
     onStateChange: (state) => {
       if (state === "expired" || state === "denied" || state === "approved-consumed") {
         el("retry").hidden = false;
+        el("verification-number").hidden = true;
       }
       if (state !== "approved") setStatus(state);
     },
@@ -89,10 +90,12 @@ async function start(): Promise<void> {
   flow = current;
 
   try {
-    const { qrDataUrl, userCode } = await current.startHeadless();
+    const { qrDataUrl, userCode, verificationNumber } = await current.startHeadless();
     if (flow !== current) return; // a newer start() replaced this one
 
     el<HTMLImageElement>("qr").src = qrDataUrl;
+    el("verification-number-value").textContent = verificationNumber ?? "";
+    el("verification-number").hidden = verificationNumber === null;
     el("user-code").textContent = userCode;
     setStatus("pending");
   } catch (err) {
