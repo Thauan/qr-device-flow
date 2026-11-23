@@ -1,4 +1,5 @@
 import React, { useCallback, useRef } from "react";
+import { CameraView } from "expo-camera";
 import type { QRScannerProps } from "./types.js";
 
 // Minimum interval between scans in milliseconds to prevent duplicate firings
@@ -49,17 +50,6 @@ export function QRScanner({
   );
 
   if (!active) return null;
-
-  // Lazy-require expo-camera so the module only fails at runtime
-  // if the peer dependency is not installed, rather than at import time.
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { CameraView } = require("expo-camera") as {
-    CameraView: React.ComponentType<{
-      style?: object;
-      barcodeScannerSettings?: { barcodeTypes: string[] };
-      onBarcodeScanned?: (event: { data: string }) => void;
-    }>;
-  };
 
   return (
     <CameraView
