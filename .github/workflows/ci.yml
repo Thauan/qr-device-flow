@@ -54,9 +54,10 @@ jobs:
         run: pnpm exec turbo run test
 
       # Every PR that changes a published package needs a changeset.
+      # The version PR (changeset-release/*) consumes the changesets, so it has none left.
       - name: Check changesets
-        if: github.event_name == 'pull_request'
-        run: pnpm changeset status --since=origin/main
+        if: github.event_name == 'pull_request' && !startsWith(github.head_ref, 'changeset-release/')
+        run: pnpm changeset status --since="origin/main"
 
   # End-to-end tests against the Docker Compose stack: Redis, the API (verification on
   # and off) and the Next.js app. The images are built from the Dockerfile with buildx
